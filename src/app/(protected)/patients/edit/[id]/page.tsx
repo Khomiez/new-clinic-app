@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Navbar, Sidebar, LoadingScreen, ErrorScreen } from "@/components";
+import { Navbar, Sidebar, LoadingScreen, ErrorScreen, PatientForm } from "@/components";
 import HistoryRecord from "@/components/ui/HistoryRecord"; // Import the enhanced component
 import { IPatient, IClinic, IHistoryRecord } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
@@ -19,7 +19,7 @@ import { toIdString } from "@/utils/mongoHelpers";
 // Helper function to format date for input fields
 const formatDateForInput = (date: string | Date | undefined): string => {
   if (!date) return "";
-  
+
   try {
     const dateObj = date instanceof Date ? date : new Date(date);
     return dateObj.toISOString().split("T")[0];
@@ -31,7 +31,7 @@ const formatDateForInput = (date: string | Date | undefined): string => {
 // Helper function to format datetime for datetime-local input fields
 const formatDateTimeForInput = (date: string | Date | undefined): string => {
   if (!date) return "";
-  
+
   try {
     const dateObj = date instanceof Date ? date : new Date(date);
     return dateObj.toISOString().slice(0, 16);
@@ -67,7 +67,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     HN_code: "",
     ID_code: "",
     lastVisit: undefined,
-    history: []
+    history: [],
   });
 
   // State for clinics
@@ -80,7 +80,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
   const [currentRecord, setCurrentRecord] = useState<IHistoryRecord>({
     timestamp: new Date(),
     document_urls: [],
-    notes: ""
+    notes: "",
   });
 
   // Fetch admin data and clinics when component mounts
@@ -125,11 +125,12 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     if (patientFromStore && patientLoading === "succeeded") {
       // Process dates in history records
       const processedHistory = patientFromStore.history
-        ? patientFromStore.history.map(record => ({
+        ? patientFromStore.history.map((record) => ({
             ...record,
-            timestamp: typeof record.timestamp === 'string' 
-              ? new Date(record.timestamp) 
-              : record.timestamp
+            timestamp:
+              typeof record.timestamp === "string"
+                ? new Date(record.timestamp)
+                : record.timestamp,
           }))
         : [];
 
@@ -142,7 +143,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
 
       setPatient({
         ...patientFromStore,
-        history: sortedHistory
+        history: sortedHistory,
       });
     }
   }, [patientFromStore, patientLoading]);
@@ -150,17 +151,17 @@ export default function EditPatient({ params }: { params: { id: string } }) {
   // Handle input changes for patient info
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
+
     // Special handling for date fields
-    if (name === 'lastVisit' && value) {
+    if (name === "lastVisit" && value) {
       setPatient((prev) => ({
         ...prev,
-        [name]: new Date(value)
+        [name]: new Date(value),
       }));
     } else {
       setPatient((prev) => ({
         ...prev,
-        [name]: value
+        [name]: value,
       }));
     }
   };
@@ -170,16 +171,16 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    
-    if (name === 'timestamp' && value) {
+
+    if (name === "timestamp" && value) {
       setCurrentRecord((prev) => ({
         ...prev,
-        [name]: new Date(value)
+        [name]: new Date(value),
       }));
     } else {
       setCurrentRecord((prev) => ({
         ...prev,
-        [name]: value
+        [name]: value,
       }));
     }
   };
@@ -194,17 +195,17 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     setPatient((prev) => {
       // Add the new record
       const updatedHistory = [...(prev.history || []), currentRecord];
-      
+
       // Sort by date (newest first)
       const sortedHistory = updatedHistory.sort((a, b) => {
         const dateA = new Date(a.timestamp).getTime();
         const dateB = new Date(b.timestamp).getTime();
         return dateB - dateA;
       });
-      
+
       return {
         ...prev,
-        history: sortedHistory
+        history: sortedHistory,
       };
     });
 
@@ -212,7 +213,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     setCurrentRecord({
       timestamp: new Date(),
       document_urls: [],
-      notes: ""
+      notes: "",
     });
 
     setIsAddingRecord(false);
@@ -223,7 +224,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     if (confirm("Are you sure you want to remove this record?")) {
       setPatient((prev) => ({
         ...prev,
-        history: prev.history?.filter((_, i) => i !== index)
+        history: prev.history?.filter((_, i) => i !== index),
       }));
     }
   };
@@ -232,23 +233,23 @@ export default function EditPatient({ params }: { params: { id: string } }) {
   const handleUpdateRecordDate = (index: number, newDate: Date) => {
     setPatient((prev) => {
       if (!prev.history) return prev;
-      
+
       const updatedHistory = [...prev.history];
       updatedHistory[index] = {
         ...updatedHistory[index],
-        timestamp: newDate
+        timestamp: newDate,
       };
-      
+
       // Re-sort by date (newest first)
       const sortedHistory = updatedHistory.sort((a, b) => {
         const dateA = new Date(a.timestamp).getTime();
         const dateB = new Date(b.timestamp).getTime();
         return dateB - dateA;
       });
-      
+
       return {
         ...prev,
-        history: sortedHistory
+        history: sortedHistory,
       };
     });
   };
@@ -257,18 +258,18 @@ export default function EditPatient({ params }: { params: { id: string } }) {
   const handleAddDocument = (recordIndex: number, url: string) => {
     setPatient((prev) => {
       if (!prev.history) return prev;
-      
+
       const updatedHistory = [...prev.history];
       const record = updatedHistory[recordIndex];
-      
+
       updatedHistory[recordIndex] = {
         ...record,
-        document_urls: [...(record.document_urls || []), url]
+        document_urls: [...(record.document_urls || []), url],
       };
-      
+
       return {
         ...prev,
-        history: updatedHistory
+        history: updatedHistory,
       };
     });
   };
@@ -277,18 +278,19 @@ export default function EditPatient({ params }: { params: { id: string } }) {
   const handleRemoveDocument = (recordIndex: number, documentIndex: number) => {
     setPatient((prev) => {
       if (!prev.history) return prev;
-      
+
       const updatedHistory = [...prev.history];
       const record = updatedHistory[recordIndex];
-      
+
       updatedHistory[recordIndex] = {
         ...record,
-        document_urls: record.document_urls?.filter((_, i) => i !== documentIndex) || []
+        document_urls:
+          record.document_urls?.filter((_, i) => i !== documentIndex) || [],
       };
-      
+
       return {
         ...prev,
-        history: updatedHistory
+        history: updatedHistory,
       };
     });
   };
@@ -312,7 +314,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
         updatePatient({
           patientId: toIdString(patient._id),
           clinicId,
-          patientData: patient
+          patientData: patient,
         })
       ).unwrap();
 
@@ -327,14 +329,20 @@ export default function EditPatient({ params }: { params: { id: string } }) {
   const handleClinicChange = (clinicId: string): void => {
     if (!clinicId) return;
 
-    const clinic = clinicsState.items.find((c) => toIdString(c._id) === clinicId);
+    const clinic = clinicsState.items.find(
+      (c) => toIdString(c._id) === clinicId
+    );
     if (clinic) {
       setSelectedClinic(clinic);
     }
   };
 
   // Show loading screen
-  if (loading || adminInfo.loading === "pending" || patientLoading === "pending") {
+  if (
+    loading ||
+    adminInfo.loading === "pending" ||
+    patientLoading === "pending"
+  ) {
     return <LoadingScreen pageName="Edit Patient" />;
   }
 
@@ -376,7 +384,9 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 disabled={patientLoading !== "succeeded"}
                 className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:bg-blue-300"
               >
-                {patientLoading !== "succeeded" ? "Saving..." : "Save Changes 💾"}
+                {patientLoading !== "succeeded"
+                  ? "Saving..."
+                  : "Save Changes 💾"}
               </button>
             </div>
           </div>
@@ -389,120 +399,15 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 <h2 className="text-xl text-blue-700 font-medium mb-4 flex items-center gap-2">
                   Patient Details 📋
                 </h2>
-                <form>
-                  <div className="space-y-4">
-                    <div>
-                      <label
-                        className="block text-sm font-medium text-slate-600 mb-1"
-                        htmlFor="name"
-                      >
-                        Full Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={patient.name || ""}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-medium text-slate-600 mb-1"
-                        htmlFor="HN_code"
-                      >
-                        Hospital Number (HN){" "}
-                        <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="HN_code"
-                        name="HN_code"
-                        value={patient.HN_code || ""}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-medium text-slate-600 mb-1"
-                        htmlFor="ID_code"
-                      >
-                        ID Number
-                      </label>
-                      <input
-                        type="text"
-                        id="ID_code"
-                        name="ID_code"
-                        value={patient.ID_code || ""}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-medium text-slate-600 mb-1"
-                        htmlFor="lastVisit"
-                      >
-                        Last Visit Date
-                      </label>
-                      <input
-                        type="date"
-                        id="lastVisit"
-                        name="lastVisit"
-                        value={formatDateForInput(patient.lastVisit)}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-medium text-slate-600 mb-1"
-                        htmlFor="createdAt"
-                      >
-                        Created Date
-                      </label>
-                      <input
-                        type="text"
-                        id="createdAt"
-                        name="createdAt"
-                        value={
-                          patient.createdAt
-                            ? new Date(patient.createdAt).toLocaleDateString()
-                            : "N/A"
-                        }
-                        readOnly
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 bg-gray-100"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-medium text-slate-600 mb-1"
-                        htmlFor="updatedAt"
-                      >
-                        Last Updated
-                      </label>
-                      <input
-                        type="text"
-                        id="updatedAt"
-                        name="updatedAt"
-                        value={
-                          patient.updatedAt
-                            ? new Date(patient.updatedAt).toLocaleDateString()
-                            : "N/A"
-                        }
-                        readOnly
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 bg-gray-100"
-                      />
-                    </div>
-                  </div>
-                </form>
+                <PatientForm
+                  patient={patient}
+                  handleChange={handleChange}
+                  handleSubmit={handleSubmit}
+                  isSubmitting={patientLoading !== "succeeded"}
+                  submitLabel="Update Patient"
+                  cancelAction={() => router.push("/dashboard")}
+                  isEditMode={true} // This indicates it's edit mode
+                />
               </div>
             </div>
 
@@ -535,7 +440,9 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                         <input
                           type="datetime-local"
                           name="timestamp"
-                          value={formatDateTimeForInput(currentRecord.timestamp)}
+                          value={formatDateTimeForInput(
+                            currentRecord.timestamp
+                          )}
                           onChange={handleRecordChange}
                           className="w-full px-3 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
                         />

@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Navbar, Sidebar, LoadingScreen, ErrorScreen } from "@/components";
+import { Navbar, Sidebar, LoadingScreen, ErrorScreen, PatientForm } from "@/components";
 import { IClinic } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
@@ -12,6 +12,7 @@ import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
 import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
+import { useNextHNCode } from "@/hooks/useNextHNCode";
 
 export default function AddPatient() {
   // Router and search params
@@ -31,7 +32,6 @@ export default function AddPatient() {
   // Local state for patient data
   const [patient, setPatient] = useState({
     name: "",
-    HN_code: "",
     ID_code: "",
     lastVisit: "",
     history: [],
@@ -41,6 +41,9 @@ export default function AddPatient() {
   const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(
     undefined
   );
+
+  // Get next HN code
+  const { nextHNCode, loading: hnLoading, error: hnError } = useNextHNCode(clinicId || undefined);
 
   // Fetch admin data and clinics when component mounts
   useEffect(() => {
@@ -103,16 +106,22 @@ export default function AddPatient() {
     }
 
     // Validate required fields
-    if (!patient.name || !patient.HN_code) {
-      alert("Name and Hospital Number (HN) are required fields");
+    if (!patient.name) {
+      alert("Name is required");
       return;
     }
 
     try {
+      // Create patient without HN_code - it will be auto-generated on the server
+      const patientToSubmit = {
+        ...patient,
+        HN_code: nextHNCode // This will be used as a fallback if the server-side logic fails
+      };
+
       await dispatch(
         addPatient({
           clinicId,
-          patientData: patient,
+          patientData: patientToSubmit,
         })
       ).unwrap();
 
@@ -200,112 +209,16 @@ export default function AddPatient() {
             </h2>
 
             {selectedClinic ? (
-              <form className="max-w-2xl mx-auto" onSubmit={handleSubmit}>
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label
-                        className="block text-sm font-medium text-slate-600 mb-1"
-                        htmlFor="name"
-                      >
-                        Full Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={patient.name}
-                        onChange={handleChange}
-                        placeholder="Enter patient's full name"
-                        required
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        className="block text-sm font-medium text-slate-600 mb-1"
-                        htmlFor="HN_code"
-                      >
-                        Hospital Number (HN){" "}
-                        <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="HN_code"
-                        name="HN_code"
-                        value={patient.HN_code}
-                        onChange={handleChange}
-                        placeholder="Enter hospital number"
-                        required
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label
-                      className="block text-sm font-medium text-slate-600 mb-1"
-                      htmlFor="ID_code"
-                    >
-                      ID Number
-                    </label>
-                    <input
-                      type="text"
-                      id="ID_code"
-                      name="ID_code"
-                      value={patient.ID_code}
-                      onChange={handleChange}
-                      placeholder="Enter ID number (optional)"
-                      className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      className="block text-sm font-medium text-slate-600 mb-1"
-                      htmlFor="lastVisit"
-                    >
-                      Last Visit Date
-                    </label>
-                    <input
-                      type="date"
-                      id="lastVisit"
-                      name="lastVisit"
-                      value={patient.lastVisit}
-                      onChange={handleChange}
-                      className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-                    />
-                  </div>
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                    <p className="text-sm text-blue-600">
-                      <span className="font-bold">Note:</span> Medical history
-                      records can be added after creating the patient.
-                    </p>
-                  </div>
-                  <div className="py-2">
-                    <p className="text-sm text-slate-500">
-                      <span className="text-red-500">*</span> Required fields
-                    </p>
-                  </div>{" "}
-                  <div className="flex justify-end gap-3 mt-6">
-                    <button
-                      type="button"
-                      onClick={() => router.push("/dashboard")}
-                      className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition flex items-center gap-1"
-                    >
-                      <span>Cancel</span> ❌
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={patientStatus === "pending"}
-                      className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:bg-blue-300"
-                    >
-                      {patientStatus === "pending"
-                        ? "Saving..."
-                        : "Save Patient 💾"}
-                    </button>
-                  </div>
-                </div>
-              </form>
+              <PatientForm
+                patient={patient}
+                handleChange={handleChange}
+                handleSubmit={handleSubmit}
+                isSubmitting={patientStatus === "pending"}
+                submitLabel="Add Patient"
+                cancelAction={() => router.push("/dashboard")}
+                isEditMode={false}
+                nextHNCode={nextHNCode}
+              />
             ) : (
               <div className="text-center py-8 text-blue-500">
                 <div className="text-5xl mb-4">🏥</div>

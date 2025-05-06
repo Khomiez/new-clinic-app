@@ -9,6 +9,8 @@ interface PatientFormProps {
   isSubmitting: boolean;
   submitLabel?: string;
   cancelAction?: () => void;
+  isEditMode?: boolean;
+  nextHNCode?: string;
 }
 
 const PatientForm: React.FC<PatientFormProps> = ({
@@ -17,7 +19,9 @@ const PatientForm: React.FC<PatientFormProps> = ({
   handleSubmit,
   isSubmitting,
   submitLabel = "Save Patient",
-  cancelAction
+  cancelAction,
+  isEditMode = false,
+  nextHNCode = ""
 }) => {
   return (
     <form className="max-w-2xl mx-auto" onSubmit={handleSubmit}>
@@ -53,12 +57,17 @@ const PatientForm: React.FC<PatientFormProps> = ({
               type="text"
               id="HN_code"
               name="HN_code"
-              value={patient.HN_code || ""}
+              value={isEditMode ? (patient.HN_code || "") : (nextHNCode || "HN0001")}
               onChange={handleChange}
-              placeholder="Enter hospital number"
-              required
-              className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
+              placeholder="Auto-generated"
+              disabled={true}
+              className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-100 cursor-not-allowed"
             />
+            {!isEditMode && (
+              <p className="text-xs text-blue-500 mt-1">
+                This HN code will be automatically assigned
+              </p>
+            )}
           </div>
         </div>
 

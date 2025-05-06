@@ -102,6 +102,31 @@ export async function POST(request: NextRequest) {
     await dbConnect();
 
     const Patient = getPatientModel(clinicId);
+    
+    // If no HN_code is provided, generate one
+    if (!body.HN_code) {
+      // Find the patient with the highest HN code
+      const lastPatient = await Patient.findOne({})
+        .sort({ HN_code: -1 })
+        .limit(1);
+
+      let nextHNCode = "HN0001"; // Default starting HN code
+
+      if (lastPatient && lastPatient.HN_code) {
+        // Extract the numeric part of the HN code
+        const lastCodeMatch = lastPatient.HN_code.match(/HN(\d+)/);
+        
+        if (lastCodeMatch && lastCodeMatch[1]) {
+          // Increment the numeric part and pad with zeros
+          const nextNumber = parseInt(lastCodeMatch[1], 10) + 1;
+          nextHNCode = `HN${nextNumber.toString().padStart(4, '0')}`;
+        }
+      }
+      
+      // Set the generated HN code
+      body.HN_code = nextHNCode;
+    }
+
     const patient = await Patient.create(body);
 
     return NextResponse.json({ success: true, patient }, { status: 201 });
