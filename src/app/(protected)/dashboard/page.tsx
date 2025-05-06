@@ -10,6 +10,7 @@ import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
 import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
 import { fetchPatients, deletePatient, clearPatients } from "@/redux/features/patients/patientsSlice";
 import { fetchAdminData } from "@/redux/features/admin/adminSlice";
+import { setSelectedClinic } from "@/redux/features/settings/settingsSlice";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
 
@@ -24,9 +25,10 @@ export default function AdminDashboard() {
   const adminInfo = useAppSelector((state) => state.admin);
   const clinicsState = useAppSelector((state) => state.clinics);
   const patientsState = useAppSelector((state) => state.patients);
+  const selectedClinicId = useAppSelector((state) => state.settings.selectedClinicId);
   const dispatch = useAppDispatch();
 
-  // Local state
+  // Local state for selected clinic
   const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [filteredPatients, setFilteredPatients] = useState<IPatient[]>([]);
@@ -48,15 +50,36 @@ export default function AdminDashboard() {
     }
   }, [adminInfo.loading, adminInfo.id, dispatch]);
 
-  // Set the first clinic as selected when clinics are loaded
+  // Set the selected clinic based on persisted selection or default to first clinic
   useEffect(() => {
-    if (clinicsState.loading === "succeeded" && Array.isArray(clinicsState.items) && clinicsState.items.length > 0) {
+    if (
+      clinicsState.loading === "succeeded" && 
+      Array.isArray(clinicsState.items) && 
+      clinicsState.items.length > 0
+    ) {
+      // If we have a saved clinic ID in Redux, try to use that first
+      if (selectedClinicId) {
+        const savedClinic = clinicsState.items.find(
+          (c) => toIdString(c._id) === selectedClinicId
+        );
+        
+        if (savedClinic) {
+          setSelectedClinic(savedClinic);
+          dispatch(fetchPatients(selectedClinicId));
+          return;
+        }
+      }
+      
+      // Fallback to first clinic if no saved clinic or saved clinic not found
       if (!selectedClinic) {
         setSelectedClinic(clinicsState.items[0]);
-        dispatch(fetchPatients(toIdString(clinicsState.items[0]._id)));
+        const firstClinicId = toIdString(clinicsState.items[0]._id);
+        // Store the clinic ID in Redux
+        dispatch(setSelectedClinic(firstClinicId));
+        dispatch(fetchPatients(firstClinicId));
       }
     }
-  }, [clinicsState.loading, clinicsState.items, selectedClinic, dispatch]);
+  }, [clinicsState.loading, clinicsState.items, selectedClinic, selectedClinicId, dispatch]);
 
   // Filter patients based on search term
   useEffect(() => {
@@ -111,6 +134,8 @@ export default function AdminDashboard() {
     const clinic = clinicsState.items.find((c) => toIdString(c._id) === clinicId);
     if (clinic) {
       setSelectedClinic(clinic);
+      // Store the selected clinic ID in Redux
+      dispatch(setSelectedClinic(clinicId));
       dispatch(fetchPatients(clinicId));
     }
   };
