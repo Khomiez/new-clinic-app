@@ -1,4 +1,4 @@
-// app/api/auth/me/route.ts
+// src/app/api/auth/me/route.ts
 import { dbConnect } from "@/db";
 import { Admin } from "@/models";
 import { NextRequest, NextResponse } from "next/server";
@@ -8,23 +8,25 @@ export async function GET(request: NextRequest) {
   try {
     await dbConnect();
     
-    // Get token from cookies
-    const cookieStore = await cookies();
+    // Get token from cookies - fix the await issue
+    const cookieStore = cookies();
     const token = cookieStore.get("token")?.value;
     
     if (!token) {
       return NextResponse.json(
-        { error: "Not authenticated" },
+        { success: false, error: "Not authenticated" },
         { status: 401 }
       );
     }
     
     // Find admin by id (token)
-    const admin = await Admin.findById(token).select("-password");
+    const admin = await Admin.findById(token)
+      .select("-password")
+      .populate("managedClinics");
     
     if (!admin) {
       return NextResponse.json(
-        { error: "Admin not found" },
+        { success: false, error: "Admin not found" },
         { status: 404 }
       );
     }
@@ -33,7 +35,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Error fetching admin data:", error);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { success: false, error: "Internal Server Error" },
       { status: 500 }
     );
   }

@@ -1,6 +1,6 @@
+// src/app/api/auth/login/route.ts
 import { dbConnect } from "@/db";
 import { Admin } from "@/models";
-import { serialize } from "cookie";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -19,8 +19,8 @@ export async function POST(request: Request) {
 
     const admin = await Admin.findOne({ username });
     
-    // Check if admin exists and verify password (you need to implement proper password comparison)
-    if (!admin || admin.password !== password) { // Replace with proper password verification
+    // Check if admin exists and verify password
+    if (!admin || admin.password !== password) { // In production, use proper password hashing
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 }

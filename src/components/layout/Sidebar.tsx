@@ -1,6 +1,6 @@
-// components/Sidebar.tsx
+// src/components/layout/Sidebar.tsx
 import React from 'react';
-import Image from 'next/image';
+import Link from 'next/link';
 import { IClinic } from '@/interfaces';
 import { toIdString } from '@/utils/mongoHelpers';
 
@@ -8,15 +8,25 @@ interface SidebarProps {
   clinics: IClinic[];
   selectedClinic?: IClinic;
   handleClinicChange: (clinicId: string) => void;
+  activePage?: 'dashboard' | 'appointments' | 'examinations' | 'medications' | 'settings';
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
   clinics, 
   selectedClinic, 
-  handleClinicChange 
+  handleClinicChange,
+  activePage = 'dashboard'
 }) => {
+  // Navigation links configuration
+  const navLinks = [
+    { id: 'dashboard', name: 'Dashboard', icon: '📊', href: '/dashboard' },
+    { id: 'appointments', name: 'Appointments', icon: '📅', href: '#' },
+    { id: 'examinations', name: 'Examinations', icon: '🩺', href: '#' },
+    { id: 'medications', name: 'Medications', icon: '💊', href: '#' },
+  ];
+
   return (
-    <div className="w-64 bg-white shadow-md h-screen">
+    <div className="w-64 bg-white shadow-md h-screen flex flex-col">
       {/* Logo Section */}
       <div className="p-6 border-b border-blue-100">
         <div className="flex items-center">
@@ -27,48 +37,27 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation */}
-      <nav className="p-4">
+      <nav className="p-4 flex-grow">
         <p className="text-blue-400 uppercase text-xs font-semibold mb-2">
           Main Menu
         </p>
         
         <ul>
-          <li className="mb-1">
-            <a 
-              href="#" 
-              className="flex items-center px-4 py-3 text-blue-800 bg-blue-100 rounded-lg"
-            >
-              <span className="mr-3">📊</span>
-              Dashboard
-            </a>
-          </li>
-          <li className="mb-1">
-            <a 
-              href="#" 
-              className="flex items-center px-4 py-3 text-blue-500 hover:bg-blue-50 rounded-lg"
-            >
-              <span className="mr-3">📅</span>
-              Appointments
-            </a>
-          </li>
-          <li className="mb-1">
-            <a 
-              href="#" 
-              className="flex items-center px-4 py-3 text-blue-500 hover:bg-blue-50 rounded-lg"
-            >
-              <span className="mr-3">🩺</span>
-              Examinations
-            </a>
-          </li>
-          <li className="mb-1">
-            <a 
-              href="#" 
-              className="flex items-center px-4 py-3 text-blue-500 hover:bg-blue-50 rounded-lg"
-            >
-              <span className="mr-3">💊</span>
-              Medications
-            </a>
-          </li>
+          {navLinks.map(link => (
+            <li key={link.id} className="mb-1">
+              <Link 
+                href={link.href}
+                className={`flex items-center px-4 py-3 rounded-lg ${
+                  activePage === link.id 
+                    ? 'text-blue-800 bg-blue-100' 
+                    : 'text-blue-500 hover:bg-blue-50'
+                }`}
+              >
+                <span className="mr-3">{link.icon}</span>
+                {link.name}
+              </Link>
+            </li>
+          ))}
         </ul>
         
         {/* Clinic Selection */}
@@ -93,7 +82,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               ))}
             </select>
           ) : (
-            <div className="text-blue-400 text-sm p-2">
+            <div className="text-blue-400 text-sm p-2 bg-blue-50 rounded-lg">
               No clinics available
             </div>
           )}
@@ -101,14 +90,18 @@ const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Settings Bottom Section */}
-      <div className="absolute bottom-0 w-64 p-4 border-t border-blue-100">
-        <a 
-          href="#" 
-          className="flex items-center px-4 py-3 text-blue-500 hover:bg-blue-50 rounded-lg"
+      <div className="p-4 border-t border-blue-100">
+        <Link 
+          href="/settings"
+          className={`flex items-center px-4 py-3 rounded-lg ${
+            activePage === 'settings' 
+              ? 'text-blue-800 bg-blue-100' 
+              : 'text-blue-500 hover:bg-blue-50'
+          }`}
         >
           <span className="mr-3">⚙️</span>
           Settings
-        </a>
+        </Link>
       </div>
     </div>
   );

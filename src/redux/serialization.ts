@@ -1,4 +1,4 @@
-// redux/serialization.ts
+// src/redux/serialization.ts
 import { Types } from 'mongoose';
 
 /**
@@ -20,6 +20,11 @@ export const serializeData = <T>(data: T): T => {
       return data.toString() as unknown as T;
     }
 
+    // Handle Date objects
+    if (data instanceof Date) {
+      return data.toISOString() as unknown as T;
+    }
+
     // Handle regular objects
     const result: Record<string, any> = {};
     
@@ -28,6 +33,10 @@ export const serializeData = <T>(data: T): T => {
       if (value instanceof Types.ObjectId) {
         result[key] = value.toString();
       } 
+      // Convert Date to ISO string
+      else if (value instanceof Date) {
+        result[key] = value.toISOString();
+      }
       // Recursively serialize nested objects/arrays
       else if (typeof value === 'object' && value !== null) {
         result[key] = serializeData(value);
@@ -46,54 +55,8 @@ export const serializeData = <T>(data: T): T => {
 };
 
 /**
- * Prepares data for API submission by converting date objects to ISO strings
- * and serializing MongoDB ObjectIds to strings
+ * Prepares data for API submission by handling dates and ObjectIds
  */
 export const prepareForApiSubmission = <T>(data: T): T => {
-  if (!data) return data;
-
-  // Handle arrays
-  if (Array.isArray(data)) {
-    return data.map(item => prepareForApiSubmission(item)) as unknown as T;
-  }
-
-  // Handle objects
-  if (typeof data === 'object' && data !== null) {
-    // Handle Date objects
-    if (data instanceof Date) {
-      return data.toISOString() as unknown as T;
-    }
-    
-    // Handle MongoDB ObjectId directly
-    if (data instanceof Types.ObjectId) {
-      return data.toString() as unknown as T;
-    }
-
-    // Handle regular objects
-    const result: Record<string, any> = {};
-    
-    for (const [key, value] of Object.entries(data)) {
-      // Convert Date to ISO string
-      if (value instanceof Date) {
-        result[key] = value.toISOString();
-      }
-      // Convert ObjectId to string
-      else if (value instanceof Types.ObjectId) {
-        result[key] = value.toString();
-      } 
-      // Recursively prepare nested objects/arrays
-      else if (typeof value === 'object' && value !== null) {
-        result[key] = prepareForApiSubmission(value);
-      }
-      // Keep primitive values as is
-      else {
-        result[key] = value;
-      }
-    }
-
-    return result as unknown as T;
-  }
-
-  // Return primitive values as is
-  return data;
+  return serializeData(data);
 };

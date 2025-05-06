@@ -1,16 +1,12 @@
+// src/context/AuthContext.tsx
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
-import { setAdminData } from "@/redux/features/admin/adminSlice";
-import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
+import { setAdminData, clearAdmin } from "@/redux/features/admin/adminSlice";
+import { clearClinics } from "@/redux/features/clinics/clinicsSlice";
+import { clearPatients } from "@/redux/features/patients/patientsSlice";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -27,18 +23,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-
   const dispatch = useAppDispatch();
 
-  // Check if user is already authenticated on mount
+  // Check auth status on mount
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        // You would need to implement this API endpoint
         const response = await fetch("/api/auth/status");
+        if (!response.ok) {
+          throw new Error("Failed to check authentication status");
+        }
+        
         const data = await response.json();
-
         setIsAuthenticated(data.isAuthenticated);
+        
+        // If authenticated, fetch admin data
+        if (data.isAuthenticated) {
+          const adminResponse = await fetch("/api/auth/me");
+          if (adminResponse.ok) {
+            const adminData = await adminResponse.json();
+            dispatch(setAdminData(adminData.admin || adminData));
+          }
+        }
       } catch (err) {
         console.error("Auth check failed:", err);
         setIsAuthenticated(false);
@@ -48,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     checkAuthStatus();
-  }, []);
+  }, [dispatch]);
 
   const login = async (username: string, password: string) => {
     setLoading(true);
@@ -76,12 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const adminData = await adminResponse.json();
-
-      dispatch(setAdminData(adminData));
-
-      if (adminData._id) {
-        dispatch(fetchClinics(adminData._id.toString()));
-      }
+      dispatch(setAdminData(adminData.admin || adminData));
 
       setIsAuthenticated(true);
       router.push("/dashboard");
@@ -94,16 +95,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-
   const logout = async () => {
     setLoading(true);
 
     try {
-      // You would need to implement this API endpoint
       await fetch("/api/auth/logout", {
         method: "POST",
       });
 
+      // Clear Redux state
+      dispatch(clearAdmin());
+      dispatch(clearClinics());
+      dispatch(clearPatients());
+      
       setIsAuthenticated(false);
       router.push("/login");
     } catch (err: any) {

@@ -1,8 +1,8 @@
+// src/redux/features/patients/patientsSlice.ts
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { IPatient } from '@/interfaces';
 import { toIdString } from '@/utils/mongoHelpers';
-import { serializeData, prepareForApiSubmission } from '@/redux/serialization';
-import { Types } from 'mongoose';
+import { serializeData } from '@/redux/serialization';
 
 interface PatientsState {
   items: IPatient[];
@@ -18,22 +18,16 @@ const initialState: PatientsState = {
   error: null
 };
 
-// Thunk to fetch patients by clinic ID
+// Fetch patients by clinic ID
 export const fetchPatients = createAsyncThunk(
   'patients/fetchPatients',
-  async (clinicId: string | Types.ObjectId, { rejectWithValue }) => {
+  async (clinicId: string, { rejectWithValue }) => {
     try {
-      // Convert ObjectId to string if needed
-      const clinicIdStr = toIdString(clinicId);
-      
-      // Ensure clinicId is valid before making request
-      if (!clinicIdStr) {
-        throw new Error('Invalid clinic ID');
+      if (!clinicId) {
+        throw new Error('Clinic ID is required');
       }
       
-      console.log(`Fetching patients for clinic ID: ${clinicIdStr}`);
-      // Use the correct API endpoint
-      const response = await fetch(`/api/patient?clinicId=${clinicIdStr}`);
+      const response = await fetch(`/api/patient?clinicId=${clinicId}`);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -42,35 +36,33 @@ export const fetchPatients = createAsyncThunk(
       
       const data = await response.json();
       
-      // Serialize the data to ensure all ObjectIds are converted to strings
-      // This is critical for Redux which requires serializable state
-      return serializeData(data.patients || []); 
-    } catch (error) {
-      console.error('Error fetching patients:', error);
-      return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch patients');
+      if (!data.success) {
+        return rejectWithValue(data.error || 'Failed to fetch patients');
+      }
+      
+      return serializeData(data.patients || []);
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to fetch patients');
     }
   }
 );
 
-// Thunk to fetch a single patient by ID
+// Fetch a single patient by ID
 export const fetchPatientById = createAsyncThunk(
   'patients/fetchPatientById',
   async ({ 
     clinicId, 
     patientId 
   }: { 
-    clinicId: string | Types.ObjectId, 
-    patientId: string | Types.ObjectId 
+    clinicId: string, 
+    patientId: string 
   }, { rejectWithValue }) => {
     try {
-      const clinicIdStr = toIdString(clinicId);
-      const patientIdStr = toIdString(patientId);
-      
-      if (!clinicIdStr || !patientIdStr) {
-        throw new Error('Invalid clinic or patient ID');
+      if (!clinicId || !patientId) {
+        throw new Error('Clinic ID and Patient ID are required');
       }
       
-      const response = await fetch(`/api/patient?clinicId=${clinicIdStr}&id=${patientIdStr}`);
+      const response = await fetch(`/api/patient?clinicId=${clinicId}&id=${patientId}`);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -79,40 +71,38 @@ export const fetchPatientById = createAsyncThunk(
       
       const data = await response.json();
       
-      // Serialize the patient data to ensure all ObjectIds are strings
+      if (!data.success) {
+        return rejectWithValue(data.error || 'Failed to fetch patient');
+      }
+      
       return serializeData(data.patient);
-    } catch (error) {
-      return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch patient');
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to fetch patient');
     }
   }
 );
 
-// Thunk to add a new patient
+// Add a new patient
 export const addPatient = createAsyncThunk(
   'patients/addPatient',
   async ({ 
     clinicId, 
     patientData 
   }: { 
-    clinicId: string | Types.ObjectId, 
+    clinicId: string, 
     patientData: Partial<IPatient> 
   }, { rejectWithValue }) => {
     try {
-      const clinicIdStr = toIdString(clinicId);
-      
-      if (!clinicIdStr) {
-        throw new Error('Invalid clinic ID');
+      if (!clinicId) {
+        throw new Error('Clinic ID is required');
       }
       
-      // Prepare data for API by serializing ObjectIds and dates
-      const serializedData = prepareForApiSubmission(patientData);
-      
-      const response = await fetch(`/api/patient?clinicId=${clinicIdStr}`, {
+      const response = await fetch(`/api/patient?clinicId=${clinicId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(serializedData),
+        body: JSON.stringify(patientData),
       });
       
       if (!response.ok) {
@@ -122,15 +112,18 @@ export const addPatient = createAsyncThunk(
       
       const data = await response.json();
       
-      // Serialize the response to ensure all ObjectIds are strings
+      if (!data.success) {
+        return rejectWithValue(data.error || 'Failed to add patient');
+      }
+      
       return serializeData(data.patient);
-    } catch (error) {
-      return rejectWithValue(error instanceof Error ? error.message : 'Failed to add patient');
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to add patient');
     }
   }
 );
 
-// Thunk to update an existing patient
+// Update an existing patient
 export const updatePatient = createAsyncThunk(
   'patients/updatePatient',
   async ({ 
@@ -138,27 +131,21 @@ export const updatePatient = createAsyncThunk(
     patientId, 
     patientData 
   }: { 
-    clinicId: string | Types.ObjectId, 
-    patientId: string | Types.ObjectId, 
+    clinicId: string, 
+    patientId: string, 
     patientData: Partial<IPatient> 
   }, { rejectWithValue }) => {
     try {
-      const clinicIdStr = toIdString(clinicId);
-      const patientIdStr = toIdString(patientId);
-      
-      if (!clinicIdStr || !patientIdStr) {
-        throw new Error('Invalid clinic or patient ID');
+      if (!clinicId || !patientId) {
+        throw new Error('Clinic ID and Patient ID are required');
       }
       
-      // Prepare data for API by serializing ObjectIds and dates
-      const serializedData = prepareForApiSubmission(patientData);
-      
-      const response = await fetch(`/api/patient?clinicId=${clinicIdStr}&id=${patientIdStr}`, {
+      const response = await fetch(`/api/patient?clinicId=${clinicId}&id=${patientId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(serializedData),
+        body: JSON.stringify(patientData),
       });
       
       if (!response.ok) {
@@ -168,33 +155,33 @@ export const updatePatient = createAsyncThunk(
       
       const data = await response.json();
       
-      // Serialize the response to ensure all ObjectIds are strings
+      if (!data.success) {
+        return rejectWithValue(data.error || 'Failed to update patient');
+      }
+      
       return serializeData(data.patient);
-    } catch (error) {
-      return rejectWithValue(error instanceof Error ? error.message : 'Failed to update patient');
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to update patient');
     }
   }
 );
 
-// Thunk to delete a patient
+// Delete a patient
 export const deletePatient = createAsyncThunk(
   'patients/deletePatient',
   async ({ 
     clinicId, 
     patientId 
   }: { 
-    clinicId: string | Types.ObjectId, 
-    patientId: string | Types.ObjectId 
+    clinicId: string, 
+    patientId: string 
   }, { rejectWithValue }) => {
     try {
-      const clinicIdStr = toIdString(clinicId);
-      const patientIdStr = toIdString(patientId);
-      
-      if (!clinicIdStr || !patientIdStr) {
-        throw new Error('Invalid clinic or patient ID');
+      if (!clinicId || !patientId) {
+        throw new Error('Clinic ID and Patient ID are required');
       }
       
-      const response = await fetch(`/api/patient?clinicId=${clinicIdStr}&id=${patientIdStr}`, {
+      const response = await fetch(`/api/patient?clinicId=${clinicId}&id=${patientId}`, {
         method: 'DELETE',
       });
       
@@ -203,9 +190,15 @@ export const deletePatient = createAsyncThunk(
         return rejectWithValue(errorData.error || 'Failed to delete patient');
       }
       
-      return patientIdStr; // Return the deleted patient ID for state updates
-    } catch (error) {
-      return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete patient');
+      const data = await response.json();
+      
+      if (!data.success) {
+        return rejectWithValue(data.error || 'Failed to delete patient');
+      }
+      
+      return patientId; // Return the deleted patient ID for state updates
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to delete patient');
     }
   }
 );
@@ -216,7 +209,9 @@ const patientsSlice = createSlice({
   reducers: {
     clearPatients: (state) => {
       state.items = [];
+      state.currentPatient = null;
       state.loading = 'idle';
+      state.error = null;
     },
     clearCurrentPatient: (state) => {
       state.currentPatient = null;
@@ -278,13 +273,11 @@ const patientsSlice = createSlice({
         state.loading = 'succeeded';
         state.currentPatient = action.payload;
         // Also update in the items array if it exists
-        if (state.items.length > 0) {
-          state.items = state.items.map(patient => 
-            patient._id.toString() === action.payload._id.toString() 
-              ? action.payload 
-              : patient
-          );
-        }
+        state.items = state.items.map(patient => 
+          patient._id.toString() === action.payload._id.toString() 
+            ? action.payload 
+            : patient
+        );
         state.error = null;
       })
       .addCase(updatePatient.rejected, (state, action) => {

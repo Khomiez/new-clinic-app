@@ -1,9 +1,9 @@
+// src/app/(protected)/dashboard/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Types } from "mongoose";
-import { Sidebar, Navbar, LoadingScreen, Card } from "@/components";
+import { Sidebar, Navbar, LoadingScreen, ErrorScreen, Card } from "@/components";
 import { IClinic, IPatient } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
@@ -11,49 +11,7 @@ import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
 import { fetchPatients, deletePatient, clearPatients } from "@/redux/features/patients/patientsSlice";
 import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { useAuth } from "@/context";
-import { toObjectId, toIdString } from "@/utils/mongoHelpers";
-
-// Extract clinics from the Redux state
-const extractClinicsData = (clinicsState: any): any[] => {
-  console.log("Extracting clinics from state:", clinicsState);
-  
-  if (!clinicsState) {
-    console.warn("Clinics state is undefined");
-    return [];
-  }
-  
-  // Check if items is an array and has elements
-  if (Array.isArray(clinicsState.items) && clinicsState.items.length > 0) {
-    console.log("Found clinics array in items");
-    return clinicsState.items;
-  }
-  
-  // Check for nested data structure where items is an object with a data property
-  if (clinicsState.items && clinicsState.items.data) {
-    // Check if there's a clinics array in the data
-    if (clinicsState.items.data.clinics && Array.isArray(clinicsState.items.data.clinics)) {
-      console.log("Found clinics in items.data.clinics structure");
-      return clinicsState.items.data.clinics;
-    }
-    
-    // If items.data itself is an array, return it
-    if (Array.isArray(clinicsState.items.data)) {
-      console.log("Found array in items.data");
-      return clinicsState.items.data;
-    }
-  }
-  
-  // Finally, if items itself is an object with clinic-like properties, wrap it in an array
-  if (clinicsState.items && typeof clinicsState.items === 'object' && !Array.isArray(clinicsState.items)) {
-    if (clinicsState.items._id || clinicsState.items.name) {
-      console.log("Found single clinic object in items");
-      return [clinicsState.items];
-    }
-  }
-  
-  console.warn("Could not extract clinics data from state", clinicsState);
-  return [];
-};
+import { toIdString } from "@/utils/mongoHelpers";
 
 // Format date for display
 const formatDate = (date: Date | string | undefined): string => {
@@ -64,126 +22,60 @@ const formatDate = (date: Date | string | undefined): string => {
 export default function AdminDashboard() {
   // Redux state
   const adminInfo = useAppSelector((state) => state.admin);
-  const clinicsFromStore = useAppSelector((state) => state.clinics);
-  const patientsFromStore = useAppSelector((state) => state.patients);
+  const clinicsState = useAppSelector((state) => state.clinics);
+  const patientsState = useAppSelector((state) => state.patients);
   const dispatch = useAppDispatch();
 
-  // State with initial values
+  // Local state
   const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [displayedClinics, setDisplayedClinics] = useState<IClinic[]>([]);
-  const [displayedPatients, setDisplayedPatients] = useState<IPatient[]>([]);
+  const [filteredPatients, setFilteredPatients] = useState<IPatient[]>([]);
 
+  // Auth context
   const { isAuthenticated, logout, loading } = useAuth();
 
   const router = useRouter();
 
   // First, fetch admin data when component mounts
   useEffect(() => {
-    console.log("Init: Fetching admin data");
     dispatch(fetchAdminData());
   }, [dispatch]);
 
   // Then, fetch clinics when admin data is available
   useEffect(() => {
     if (adminInfo.id && adminInfo.loading === "succeeded") {
-      console.log("Admin data loaded, fetching clinics for ID:", adminInfo.id);
       dispatch(fetchClinics(adminInfo.id));
     }
   }, [adminInfo.loading, adminInfo.id, dispatch]);
 
-  // Process clinics data
+  // Set the first clinic as selected when clinics are loaded
   useEffect(() => {
-    console.log("Processing clinics data:", clinicsFromStore);
-    
-    if (clinicsFromStore.loading === "succeeded") {
-      try {
-        // Extract clinic data from the nested structure
-        const rawClinics = extractClinicsData(clinicsFromStore);
-        console.log("Raw clinics after extraction:", rawClinics);
-        
-        if (rawClinics.length > 0) {
-          // Convert serialized Redux clinic data to IClinic objects
-          const clinics = rawClinics.map((clinic) => {
-            // Convert string IDs back to ObjectIds for UI operations
-            return {
-              _id: typeof clinic._id === 'string' ? toObjectId(clinic._id) : clinic._id,
-              name: clinic.name || 'Unnamed Clinic',
-              address: clinic.address || '',
-              // Ensure phone is always an array
-              phone: Array.isArray(clinic.phone) ? clinic.phone : 
-                   (clinic.phone ? [clinic.phone] : []),
-              // Process managerId array - convert strings to ObjectIds
-              managerId: Array.isArray(clinic.managerId) 
-                ? clinic.managerId.map((id: string | Types.ObjectId) => {
-                    return typeof id === 'string' ? toObjectId(id) : id;
-                  })
-                : []
-            };
-          });
-          
-          console.log("Processed clinics:", clinics);
-          setDisplayedClinics(clinics);
-          
-          // Set the first clinic as selected if none is selected yet
-          if (!selectedClinic && clinics.length > 0) {
-            console.log("Setting initial selected clinic:", clinics[0]);
-            setSelectedClinic(clinics[0]);
-            
-            // Fetch patients for the selected clinic
-            dispatch(fetchPatients(toIdString(clinics[0]._id)));
-          }
-        } else {
-          console.log("No clinics data available after extraction");
-          setDisplayedClinics([]);
-        }
-      } catch (error) {
-        console.error("Error processing clinics:", error);
-        setDisplayedClinics([]);
+    if (clinicsState.loading === "succeeded" && Array.isArray(clinicsState.items) && clinicsState.items.length > 0) {
+      if (!selectedClinic) {
+        setSelectedClinic(clinicsState.items[0]);
+        dispatch(fetchPatients(toIdString(clinicsState.items[0]._id)));
       }
     }
-  }, [clinicsFromStore, dispatch, selectedClinic]);
+  }, [clinicsState.loading, clinicsState.items, selectedClinic, dispatch]);
 
-  // Process patients data whenever it changes or when search term changes
+  // Filter patients based on search term
   useEffect(() => {
-    console.log("Processing patients data:", patientsFromStore);
-    
-    if (patientsFromStore.loading === "succeeded" && patientsFromStore.items) {
-      try {
-        // Process patient data - convert string IDs to ObjectId
-        const processedPatients = patientsFromStore.items.map((patient: any) => {
-          return {
-            ...patient,
-            _id: typeof patient._id === 'string' ? toObjectId(patient._id) : patient._id,
-            // Convert date strings to Date objects if needed
-            lastVisit: patient.lastVisit ? new Date(patient.lastVisit) : undefined,
-            createdAt: patient.createdAt ? new Date(patient.createdAt) : undefined,
-            updatedAt: patient.updatedAt ? new Date(patient.updatedAt) : undefined
-          };
-        });
-        
-        // Filter patients based on search term
-        const filtered = processedPatients.filter(
-          (patient: IPatient) =>
-            patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            patient.HN_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (patient.ID_code && patient.ID_code.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
-        
-        console.log("Filtered patients:", filtered);
-        setDisplayedPatients(filtered);
-      } catch (error) {
-        console.error("Error processing patients:", error);
-        setDisplayedPatients([]);
-      }
+    if (patientsState.loading === "succeeded" && Array.isArray(patientsState.items)) {
+      const filtered = patientsState.items.filter(
+        (patient) =>
+          patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          patient.HN_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (patient.ID_code && patient.ID_code.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      
+      setFilteredPatients(filtered);
     } else {
-      setDisplayedPatients([]);
+      setFilteredPatients([]);
     }
-  }, [patientsFromStore, searchTerm]);
+  }, [patientsState.items, patientsState.loading, searchTerm]);
 
   const handleAddPatient = (): void => {
     if (selectedClinic) {
-      // Navigate to the add patient page with clinic ID
       router.push(`/patients/add?clinicId=${toIdString(selectedClinic._id)}`);
     } else {
       alert("Please select a clinic first");
@@ -192,118 +84,55 @@ export default function AdminDashboard() {
 
   const handleEditPatient = (patient: IPatient): void => {
     if (selectedClinic) {
-      // Navigate to the edit patient page with patient ID and clinic ID
       router.push(`/patients/edit/${toIdString(patient._id)}?clinicId=${toIdString(selectedClinic._id)}`);
     }
   };
 
-  const handleDeletePatient = (patientId: Types.ObjectId): void => {
+  const handleDeletePatient = (patientId: string): void => {
     if (!selectedClinic) {
       alert("No clinic selected");
       return;
     }
     
     if (confirm("Are you sure you want to delete this patient?")) {
-      // Dispatch the delete action from Redux - pass string IDs to Redux
       dispatch(deletePatient({ 
         clinicId: toIdString(selectedClinic._id), 
-        patientId: toIdString(patientId) 
+        patientId
       }));
-      console.log(`Deleting patient with ID: ${toIdString(patientId)} from clinic: ${toIdString(selectedClinic._id)}`);
     }
   };
 
   const handleClinicChange = (clinicId: string): void => {
-    console.log("Clinic selection requested:", clinicId);
     if (!clinicId) return;
   
     // Clear patients when changing clinic
     dispatch(clearPatients());
     
-    const clinic = displayedClinics.find((c) => toIdString(c._id) === clinicId);
+    const clinic = clinicsState.items.find((c) => toIdString(c._id) === clinicId);
     if (clinic) {
-      console.log("Setting selected clinic:", clinic);
       setSelectedClinic(clinic);
-      
-      // Fetch patients for the selected clinic - using string ID for Redux
       dispatch(fetchPatients(clinicId));
-    } else {
-      console.warn("Selected clinic not found in displayedClinics:", clinicId);
     }
   };
 
-  // Debug information
-  console.log("Admin state:", adminInfo);
-  console.log("Clinics state:", clinicsFromStore);
-  console.log("Patients state:", patientsFromStore);
-  console.log("Displayed patients:", displayedPatients);
-  console.log("Selected clinic:", selectedClinic);
-
-  // Show loading screen when fetching admin data
+  // Show loading screen
   if (loading || adminInfo.loading === "pending") {
-    return <LoadingScreen pageName={`dashboard`} />;
+    return <LoadingScreen pageName="Dashboard" />;
   }
 
-  // Function to check if patients are being loaded
-  const isLoadingPatients = (): boolean => {
-    return patientsFromStore.loading === "pending";
-  };
-
-  // Function to check if patients failed to load
-  const hasPatientLoadingFailed = (): boolean => {
-    return patientsFromStore.loading === "failed";
-  };
-
-  // Function to check if no patients are found and search has completed
-  const showNoPatientFound = (): boolean => {
-    return (
-      displayedPatients.length === 0 &&
-      patientsFromStore.loading === "succeeded" &&
-      patientsFromStore.items && 
-      patientsFromStore.items.length === 0 &&
-      selectedClinic !== undefined
-    );
-  };
-
-  // Function to check if search returned no results
-  const showNoSearchResults = (): boolean => {
-    return (
-      displayedPatients.length === 0 &&
-      searchTerm.length > 0 &&
-      patientsFromStore.loading === "succeeded" &&
-      patientsFromStore.items && 
-      patientsFromStore.items.length > 0
-    );
-  };
-
-  // Show a message if there was an error loading admin data
+  // Show error if admin data failed to load
   if (adminInfo.loading === "failed") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-blue-50">
-        <div className="bg-white p-8 rounded-xl shadow-md text-center">
-          <div className="text-5xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-red-600 mb-4">
-            Admin Data Error
-          </h2>
-          <p className="text-gray-700 mb-4">
-            {adminInfo.error ||
-              "Failed to load administrator data. Please refresh or try again later."}
-          </p>
-          <button
-            onClick={() => dispatch(fetchAdminData())}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
+      <ErrorScreen
+        title="Admin Data Error"
+        error={adminInfo.error || "Failed to load administrator data"}
+        retry={() => dispatch(fetchAdminData())}
+      />
     );
   }
 
   // Get the patients count
-  const patientsCount = patientsFromStore.items && Array.isArray(patientsFromStore.items) 
-    ? patientsFromStore.items.length 
-    : 0;
+  const patientsCount = Array.isArray(patientsState.items) ? patientsState.items.length : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
@@ -315,11 +144,12 @@ export default function AdminDashboard() {
       />
 
       <div className="flex">
-        {/* Sidebar - Pass mapped clinics to ensure correct typing */}
+        {/* Sidebar */}
         <Sidebar
-          clinics={displayedClinics}
+          clinics={Array.isArray(clinicsState.items) ? clinicsState.items : []}
           selectedClinic={selectedClinic}
           handleClinicChange={handleClinicChange}
+          activePage="dashboard"
         />
 
         {/* Main Content */}
@@ -355,7 +185,7 @@ export default function AdminDashboard() {
             <Card
               cardTopic="Patient Records"
               cardEmoji="📝"
-              cardValue={displayedPatients.length}
+              cardValue={filteredPatients.length}
               cardDescription1="🔍 "
               cardDescription2={
                 searchTerm ? "Filtered results" : "All records shown"
@@ -391,7 +221,7 @@ export default function AdminDashboard() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 focus:outline-none"
-                  disabled={!selectedClinic}
+                  disabled={!selectedClinic || patientsState.loading !== "succeeded"}
                 />
               </div>
             </div>
@@ -422,7 +252,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-blue-100">
-                  {displayedPatients.map((patient) => (
+                  {filteredPatients.map((patient) => (
                     <tr
                       key={toIdString(patient._id)}
                       className="hover:bg-blue-50"
@@ -450,12 +280,14 @@ export default function AdminDashboard() {
                         <button
                           onClick={() => handleEditPatient(patient)}
                           className="text-blue-500 hover:text-blue-700 mr-3"
+                          aria-label="Edit patient"
                         >
                           ✏️
                         </button>
                         <button
-                          onClick={() => handleDeletePatient(patient._id)}
+                          onClick={() => handleDeletePatient(toIdString(patient._id))}
                           className="text-red-500 hover:text-red-700"
+                          aria-label="Delete patient"
                         >
                           🗑️
                         </button>
@@ -465,19 +297,19 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
 
-              {/* If patients are still loading */}
-              {isLoadingPatients() && (
+              {/* Loading state */}
+              {patientsState.loading === "pending" && (
                 <div className="text-center py-8 text-blue-400">
-                  <div className="text-3xl mb-2">⏳</div>
+                  <div className="text-3xl mb-2 animate-pulse">⏳</div>
                   <p>Loading patients...</p>
                 </div>
               )}
 
-              {/* If there was an error loading patients */}
-              {hasPatientLoadingFailed() && (
+              {/* Error state */}
+              {patientsState.loading === "failed" && (
                 <div className="text-center py-8 text-red-500">
                   <div className="text-3xl mb-2">⚠️</div>
-                  <p>Error loading patients: {patientsFromStore.error}</p>
+                  <p>Error loading patients: {patientsState.error}</p>
                   <button
                     onClick={() =>
                       selectedClinic && dispatch(fetchPatients(toIdString(selectedClinic._id)))
@@ -489,8 +321,8 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* If no patients are found for the selected clinic */}
-              {showNoPatientFound() && (
+              {/* Empty state - no patients for clinic */}
+              {patientsState.loading === "succeeded" && patientsState.items.length === 0 && selectedClinic && (
                 <div className="text-center py-8 text-blue-500">
                   <div className="text-3xl mb-2">📋</div>
                   <p>No patients are currently registered for this clinic.</p>
@@ -503,8 +335,8 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* If search returned no results */}
-              {showNoSearchResults() && (
+              {/* No search results */}
+              {patientsState.loading === "succeeded" && patientsState.items.length > 0 && filteredPatients.length === 0 && (
                 <div className="text-center py-8 text-blue-400">
                   <div className="text-3xl mb-2">🔍</div>
                   <p>No patients found matching your search criteria.</p>
@@ -513,11 +345,11 @@ export default function AdminDashboard() {
             </div>
 
             {/* Pagination - only show if there are patients */}
-            {displayedPatients.length > 0 && (
+            {filteredPatients.length > 0 && (
               <div className="mt-6 flex items-center justify-between">
                 <div className="text-sm text-blue-600">
                   Showing{" "}
-                  <span className="font-medium">{displayedPatients.length}</span>{" "}
+                  <span className="font-medium">{filteredPatients.length}</span>{" "}
                   of{" "}
                   <span className="font-medium">
                     {patientsCount}

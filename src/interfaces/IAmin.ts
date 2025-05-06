@@ -1,10 +1,13 @@
+// src/interfaces/IAdmin.ts
 import { Types } from 'mongoose';
 
 export interface IAdmin {
-  _id: Types.ObjectId | string; // Support both ObjectId and string
-  id?: string; // Additional ID field that might be used in the API
+  _id: Types.ObjectId | string;
   username: string;
-  email: string;
-  role: string;
-  clinics?: (Types.ObjectId | string)[]; // Support both ObjectId and string
+  password?: string; // Optional since we don't always want to expose this
+  managedClinics: Array<Types.ObjectId | string>;
+  email?: string;
+  role?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }

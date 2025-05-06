@@ -1,3 +1,4 @@
+// src/app/api/clinic/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { dbConnect } from "@/db";
 import { Admin, Clinic } from "@/models"
@@ -8,30 +9,62 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url)
         const id = searchParams.get("id")
+        const adminId = searchParams.get("adminId")
 
         await dbConnect()
 
         // If ID is provided, return a specific clinic
         if (id) {
             if (!isValidObjectId(id)) {
-                return NextResponse.json({ error: "Invalid ID format" }, { status: 400 })
+                return NextResponse.json(
+                  { success: false, error: "Invalid ID format" },
+                  { status: 400 }
+                )
             }
 
             const clinic = await Clinic.findById(id).populate("managerId")
 
             if (!clinic) {
-                return NextResponse.json({ error: "Clinic not found" }, { status: 404 })
+                return NextResponse.json(
+                  { success: false, error: "Clinic not found" },
+                  { status: 404 }
+                )
             }
 
-            return NextResponse.json({ clinic })
+            return NextResponse.json({ success: true, clinic })
         }
 
-        // Otherwise return all clinics
+        // If adminId is provided, return that admin's clinics
+        if (adminId) {
+            if (!isValidObjectId(adminId)) {
+                return NextResponse.json(
+                  { success: false, error: "Invalid admin ID format" },
+                  { status: 400 }
+                )
+            }
+
+            const admin = await Admin.findById(adminId).populate("managedClinics")
+
+            if (!admin) {
+                return NextResponse.json(
+                  { success: false, error: "Admin not found" },
+                  { status: 404 }
+                )
+            }
+
+            const clinics = admin.managedClinics || []
+            return NextResponse.json({ success: true, clinics })
+        }
+
+        // Otherwise, return all clinics
         const clinics = await Clinic.find({}).populate("managerId")
-        return NextResponse.json({ clinics })
+        return NextResponse.json({ success: true, clinics })
     } catch (error) {
         console.error("Error fetching clinic(s):", error)
-        return NextResponse.json({ error: "Failed to fetch clinic data" }, { status: 500 })
+        return NextResponse.json(
+          { success: false, error: "Failed to fetch clinic data" },
+          { status: 500 }
+        )
     }
 }
 
@@ -42,11 +75,17 @@ export async function POST(request: NextRequest) {
 
         // Validate required fields
         if (!body.name) {
-            return NextResponse.json({ error: "Clinic name is required" }, { status: 400 })
+            return NextResponse.json(
+              { success: false, error: "Clinic name is required" },
+              { status: 400 }
+            )
         }
 
         if (!Array.isArray(body.managerId)) {
-            return NextResponse.json({ error: "managerId must be an array of admin IDs" }, { status: 400 })
+            return NextResponse.json(
+              { success: false, error: "managerId must be an array of admin IDs" },
+              { status: 400 }
+            )
         }
 
         // Connect to DB
@@ -55,12 +94,18 @@ export async function POST(request: NextRequest) {
         // Validate each managerId
         for (const id of body.managerId) {
             if (!isValidObjectId(id)) {
-                return NextResponse.json({ error: `Invalid manager ID: ${id}` }, { status: 400 })
+                return NextResponse.json(
+                  { success: false, error: `Invalid manager ID: ${id}` },
+                  { status: 400 }
+                )
             }
 
             const adminExists = await Admin.findById(id)
             if (!adminExists) {
-                return NextResponse.json({ error: `Manager not found for ID: ${id}` }, { status: 404 })
+                return NextResponse.json(
+                  { success: false, error: `Manager not found for ID: ${id}` },
+                  { status: 404 }
+                )
             }
         }
 
@@ -74,22 +119,27 @@ export async function POST(request: NextRequest) {
             })
         }
 
-        return NextResponse.json({ clinic }, { status: 201 })
+        return NextResponse.json({ success: true, clinic }, { status: 201 })
     } catch (error) {
         console.error("Error creating clinic:", error)
-        return NextResponse.json({ error: "Failed to create clinic" }, { status: 500 })
+        return NextResponse.json(
+          { success: false, error: "Failed to create clinic" },
+          { status: 500 }
+        )
     }
 }
 
 // Update a clinic
-// Update a clinic
-export async function PUT(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url)
         const id = searchParams.get("id")
 
         if (!id || !isValidObjectId(id)) {
-            return NextResponse.json({ error: "Valid ID is required" }, { status: 400 })
+            return NextResponse.json(
+              { success: false, error: "Valid ID is required" },
+              { status: 400 }
+            )
         }
 
         const body = await request.json()
@@ -98,11 +148,14 @@ export async function PUT(request: NextRequest) {
         const oldClinic = await Clinic.findById(id)
 
         if (!oldClinic) {
-            return NextResponse.json({ error: "Clinic not found" }, { status: 404 })
+            return NextResponse.json(
+              { success: false, error: "Clinic not found" },
+              { status: 404 }
+            )
         }
 
-        // 1. Remove this clinic from the old manager's managedClinics
-        if (oldClinic.managerId) {
+        // 1. Remove this clinic from managers that are being removed
+        if (oldClinic.managerId && body.managerId) {
             for (const oldManagerId of oldClinic.managerId) {
                 if (!body.managerId.includes(oldManagerId.toString())) {
                     await Admin.findByIdAndUpdate(
@@ -113,8 +166,8 @@ export async function PUT(request: NextRequest) {
             }
         }
 
-        // 2. Update the clinic with new manager IDs
-        const updatedClinic = await Clinic.findByIdAndUpdate(id, { managerId: body.managerId }, {
+        // 2. Update the clinic
+        const updatedClinic = await Clinic.findByIdAndUpdate(id, body, {
             new: true,
             runValidators: true,
         }).populate("managerId")
@@ -122,18 +175,23 @@ export async function PUT(request: NextRequest) {
         // 3. Add the clinic to new managers' managedClinics
         if (body.managerId) {
             for (const newManagerId of body.managerId) {
-                await Admin.findByIdAndUpdate(
-                    newManagerId,
-                    { $addToSet: { managedClinics: id } } // Prevent duplicates
-                )
+                if (!oldClinic.managerId.some(id => id.toString() === newManagerId)) {
+                    await Admin.findByIdAndUpdate(
+                        newManagerId,
+                        { $addToSet: { managedClinics: id } } // Prevent duplicates
+                    )
+                }
             }
         }
 
-        return NextResponse.json({ clinic: updatedClinic })
+        return NextResponse.json({ success: true, clinic: updatedClinic })
 
     } catch (error) {
         console.error("Error updating clinic:", error)
-        return NextResponse.json({ error: "Failed to update clinic" }, { status: 500 })
+        return NextResponse.json(
+          { success: false, error: "Failed to update clinic" },
+          { status: 500 }
+        )
     }
 }
 
@@ -144,21 +202,39 @@ export async function DELETE(request: NextRequest) {
         const id = searchParams.get("id")
 
         if (!id || !isValidObjectId(id)) {
-            return NextResponse.json({ error: "Valid ID is required" }, { status: 400 })
+            return NextResponse.json(
+              { success: false, error: "Valid ID is required" },
+              { status: 400 }
+            )
         }
 
         await dbConnect()
+
+        // Remove this clinic from all admins' managedClinics
+        await Admin.updateMany(
+            { managedClinics: id },
+            { $pull: { managedClinics: id } }
+        )
 
         // Find and delete the clinic
         const deletedClinic = await Clinic.findByIdAndDelete(id)
 
         if (!deletedClinic) {
-            return NextResponse.json({ error: "Clinic not found" }, { status: 404 })
+            return NextResponse.json(
+              { success: false, error: "Clinic not found" },
+              { status: 404 }
+            )
         }
 
-        return NextResponse.json({ message: "Clinic deleted successfully" })
+        return NextResponse.json({ 
+          success: true, 
+          message: "Clinic deleted successfully" 
+        })
     } catch (error) {
         console.error("Error deleting clinic:", error)
-        return NextResponse.json({ error: "Failed to delete clinic" }, { status: 500 })
+        return NextResponse.json(
+          { success: false, error: "Failed to delete clinic" },
+          { status: 500 }
+        )
     }
 }
