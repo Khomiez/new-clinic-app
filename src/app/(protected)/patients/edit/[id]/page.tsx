@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Types } from "mongoose";
 import { HistoryRecord, Navbar, Sidebar, LoadingScreen } from "@/components";
