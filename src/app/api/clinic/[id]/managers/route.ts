@@ -3,8 +3,15 @@ import { dbConnect } from "@/db"
 import { Admin, Clinic } from "@/models"
 import { isValidObjectId, type Types } from "mongoose"
 
+// Define interfaces for better type checking
+interface AdminIdParams {
+  params: {
+    id: string;
+  };
+}
+
 // Get all managers (admins) of a clinic
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: AdminIdParams) {
     try {
         const { id } = params
 
@@ -29,7 +36,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 // Add a manager (admin) to a clinic
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: AdminIdParams) {
     try {
         const { id } = params
         const body = await request.json()

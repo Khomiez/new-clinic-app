@@ -2,7 +2,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { dbConnect } from "@/db";
 import { Admin, Clinic } from "@/models"
-import { isValidObjectId } from "mongoose"
+import { isValidObjectId, Types } from "mongoose"
 
 // Get all clinics or a specific clinic by ID
 export async function GET(request: NextRequest) {
@@ -157,7 +157,16 @@ export async function PATCH(request: NextRequest) {
         // 1. Remove this clinic from managers that are being removed
         if (oldClinic.managerId && body.managerId) {
             for (const oldManagerId of oldClinic.managerId) {
-                if (!body.managerId.includes(oldManagerId.toString())) {
+                // Convert ObjectId to string for comparison
+                const oldManagerIdStr = oldManagerId.toString();
+                
+                // Check if manager is in the new list (after ensuring body.managerId elements are strings)
+                const stillManaging = body.managerId.some(
+                    (newId: string | Types.ObjectId) => 
+                        (typeof newId === 'string' ? newId : newId.toString()) === oldManagerIdStr
+                );
+                
+                if (!stillManaging) {
                     await Admin.findByIdAndUpdate(
                         oldManagerId,
                         { $pull: { managedClinics: id } }
@@ -175,7 +184,17 @@ export async function PATCH(request: NextRequest) {
         // 3. Add the clinic to new managers' managedClinics
         if (body.managerId) {
             for (const newManagerId of body.managerId) {
-                if (!oldClinic.managerId.some(id => id.toString() === newManagerId)) {
+                // Convert to string if it's an ObjectId
+                const newManagerIdStr = typeof newManagerId === 'string' 
+                    ? newManagerId 
+                    : newManagerId.toString();
+                
+                // Check if this is a new manager
+                const isNewManager = !oldClinic.managerId.some(
+                    (oldId: Types.ObjectId) => oldId.toString() === newManagerIdStr
+                );
+                
+                if (isNewManager) {
                     await Admin.findByIdAndUpdate(
                         newManagerId,
                         { $addToSet: { managedClinics: id } } // Prevent duplicates
@@ -184,7 +203,10 @@ export async function PATCH(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: true, clinic: updatedClinic })
+        return NextResponse.json({
+            success: true,
+            clinic: updatedClinic
+        })
 
     } catch (error) {
         console.error("Error updating clinic:", error)

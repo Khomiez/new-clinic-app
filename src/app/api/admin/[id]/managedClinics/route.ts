@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Remove the await - params.id is already a string
+    // params.id is already a string, no need to await
     const id = params.id;
 
     if (!isValidObjectId(id)) {
@@ -49,7 +49,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Remove the await - params.id is already a string
+    // params.id is already a string, no need to await
     const id = params.id;
     const body = await request.json();
     const { clinicId } = body;
@@ -125,7 +125,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Remove the await - params.id is already a string
+    // params.id is already a string, no need to await
     const id = params.id;
     const { searchParams } = new URL(request.url);
     const clinicId = searchParams.get("clinicId");

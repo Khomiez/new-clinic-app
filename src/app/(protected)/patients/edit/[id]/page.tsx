@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Types } from "mongoose";
 import { HistoryRecord, Navbar, Sidebar, LoadingScreen } from "@/components";
@@ -43,7 +43,8 @@ const formatDateTimeForInput = (date: string | Date | undefined): string => {
 };
 
 export default function EditPatient({ params }: { params: { id: string } }) {
-  // Get patient ID from route params
+  // Get patient ID from route params directly for now
+  // Next.js will change this in the future, but as of now, we can use params directly
   const patientId = params.id;
 
   // Router and search params

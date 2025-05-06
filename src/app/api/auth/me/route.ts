@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     await dbConnect();
     
     // Get token from cookies - fix the await issue
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value;
     
     if (!token) {

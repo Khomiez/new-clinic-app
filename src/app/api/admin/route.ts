@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbConnect } from "@/db";
 import { Admin, Clinic } from "@/models";
-import { isValidObjectId } from "mongoose";
+import { isValidObjectId, Types } from "mongoose";
 
 // Get all admins or a specific admin
 export async function GET(request: NextRequest) {
@@ -119,11 +119,13 @@ export async function PATCH(request: NextRequest) {
 
         // Handle clinic relationships if managedClinics is being updated
         if (body.managedClinics) {
-            const prevClinicIds = admin.managedClinics.map(clinicId => clinicId.toString());
-            const newClinicIds = body.managedClinics.map(cid => cid.toString());
+            const prevClinicIds = admin.managedClinics.map((clinicId: Types.ObjectId) => clinicId.toString());
+            const newClinicIds = body.managedClinics.map((cid: string | Types.ObjectId) => 
+                typeof cid === 'string' ? cid : cid.toString()
+            );
 
             // Remove this admin from clinics they no longer manage
-            const removedClinics = prevClinicIds.filter(id => !newClinicIds.includes(id));
+            const removedClinics = prevClinicIds.filter((id: string) => !newClinicIds.includes(id));
             for (const clinicId of removedClinics) {
                 await Clinic.findByIdAndUpdate(
                     clinicId,
@@ -132,7 +134,7 @@ export async function PATCH(request: NextRequest) {
             }
 
             // Add this admin to newly managed clinics
-            const addedClinics = newClinicIds.filter(id => !prevClinicIds.includes(id));
+            const addedClinics = newClinicIds.filter((id: string) => !prevClinicIds.includes(id));
             for (const clinicId of addedClinics) {
                 await Clinic.findByIdAndUpdate(
                     clinicId,
