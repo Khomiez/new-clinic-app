@@ -1,12 +1,13 @@
-// src/components/ui/HistoryRecord.tsx
+// src/components/ui/EnhancedHistoryRecord.tsx
 import React, { useState } from "react";
 import { IHistoryRecord } from "@/interfaces";
-import FileUploader from "./FileUploader";
+import DocumentUpload from "./DocumentUpload";
+import { toIdString } from "@/utils/mongoHelpers";
 
-interface HistoryRecordProps {
+interface EnhancedHistoryRecordProps {
   record: IHistoryRecord;
   index: number;
-  clinicId?: string; // Make it optional with ?
+  clinicId?: string;
   patientId: string;
   onRemove: (index: number) => void;
   onUpdateDate: (index: number, newDate: Date) => void;
@@ -14,7 +15,7 @@ interface HistoryRecordProps {
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
 }
 
-const HistoryRecord: React.FC<HistoryRecordProps> = ({
+const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
   record,
   index,
   clinicId,
@@ -25,13 +26,15 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
   onRemoveDocument,
 }) => {
   const [isEditingDate, setIsEditingDate] = useState(false);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [dateValue, setDateValue] = useState(
     record.timestamp instanceof Date
-      ? record.timestamp.toISOString().split("T")[0]
-      : new Date(record.timestamp).toISOString().split("T")[0]
+      ? record.timestamp.toISOString().slice(0, 16)
+      : new Date(record.timestamp).toISOString().slice(0, 16)
   );
+  const [notesValue, setNotesValue] = useState(record.notes || "");
   const [isAddingDocument, setIsAddingDocument] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Format the date nicely
   const formatDate = (dateString: string | Date): string => {
@@ -40,6 +43,8 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
       year: "numeric",
       month: "long",
       day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     }).format(date);
   };
 
@@ -52,99 +57,264 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
     setIsEditingDate(false);
   };
 
-  const handleUploadComplete = (url: string) => {
-    onAddDocument(index, url);
-    setIsAddingDocument(false);
-    setUploadError(null);
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNotesValue(e.target.value);
   };
 
-  const handleUploadError = (error: string) => {
-    setUploadError(error);
-  };
-
-  // Extract filename from URL
-  const getFilenameFromUrl = (url: string): string => {
-    return url.split("/").pop() || `Document`;
-  };
-
-  // Determine file type icon based on extension
-  const getFileIcon = (url: string): string => {
-    if (url.endsWith(".pdf")) return "📕";
-    if (url.endsWith(".jpg") || url.endsWith(".png") || url.endsWith(".jpeg"))
-      return "🖼️";
-    if (url.endsWith(".docx") || url.endsWith(".doc")) return "📝";
-    return "📄"; // Default document icon
+  const handleNotesSubmit = () => {
+    // Create a copy of the record with updated notes
+    const updatedRecord = {
+      ...record,
+      notes: notesValue,
+    };
+    
+    // You'll need to add a new function in the parent component
+    // to handle updating notes specifically
+    // For now, let's assume we can use onUpdateDate as a workaround
+    onUpdateDate(index, new Date(record.timestamp));
+    setIsEditingNotes(false);
   };
 
   const handleAddDocumentClick = () => {
     if (!clinicId) {
-      setUploadError(
-        "No clinic selected. Please select a clinic before uploading documents."
-      );
+      alert("Please select a clinic before adding documents");
       return;
     }
     setIsAddingDocument(true);
   };
 
+  const handleUploadComplete = (url: string) => {
+    onAddDocument(index, url);
+    setIsAddingDocument(false);
+  };
+
+  // Extract filename from URL
+  const getFilenameFromUrl = (url: string): string => {
+    const parts = url.split("/");
+    const filename = parts[parts.length - 1];
+    // Remove any query parameters
+    return filename.split("?")[0] || "Document";
+  };
+
+  // Determine file type icon based on extension
+  const getFileIcon = (url: string): string => {
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.endsWith(".pdf")) return "📕";
+    if (lowerUrl.match(/\.(jpg|jpeg|png|gif|webp)$/)) return "🖼️";
+    if (lowerUrl.match(/\.(doc|docx)$/)) return "📝";
+    if (lowerUrl.match(/\.(xls|xlsx|csv)$/)) return "📊";
+    if (lowerUrl.match(/\.(ppt|pptx)$/)) return "📊";
+    return "📄"; // Default document icon
+  };
+
+  // Check if a file is an image
+  const isImageFile = (url: string): boolean => {
+    const lowerUrl = url.toLowerCase();
+    return lowerUrl.match(/\.(jpg|jpeg|png|gif|webp)$/) !== null;
+  };
+
+  // Toggle image preview
+  const togglePreview = (url: string) => {
+    if (previewUrl === url) {
+      setPreviewUrl(null);
+    } else {
+      setPreviewUrl(url);
+    }
+  };
+
   return (
-    <div className="bg-blue-50 rounded-lg p-4 border border-blue-100 mb-4">
-      {/* ... existing code ... */}
-
-      {/* Add Document section with conditional rendering */}
-      {isAddingDocument && clinicId ? (
-        <div className="mt-3 p-3 bg-white rounded border border-blue-100">
-          <FileUploader
-            clinicId={clinicId}
-            patientId={patientId}
-            onUploadComplete={handleUploadComplete}
-            onUploadError={handleUploadError}
-            onCancel={() => setIsAddingDocument(false)}
-          />
-
-          {uploadError && (
-            <div className="text-xs text-red-600 mt-2">{uploadError}</div>
+    <div className="bg-white rounded-xl p-4 border border-blue-100 mb-4 shadow-sm">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex-grow">
+          {isEditingDate ? (
+            <div className="flex items-center">
+              <input
+                type="datetime-local"
+                value={dateValue}
+                onChange={handleDateChange}
+                className="px-3 py-2 border border-blue-200 rounded-lg mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={handleDateSubmit}
+                className="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setIsEditingDate(false)}
+                className="px-3 py-1.5 ml-2 border border-blue-200 text-blue-500 rounded-lg hover:bg-blue-50 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center">
+              <div className="flex items-center gap-1">
+                <span className="text-blue-400">📅</span>
+                <h3 className="font-medium text-blue-700">
+                  {formatDate(record.timestamp)}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsEditingDate(true)}
+                className="ml-2 text-blue-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50"
+                title="Edit date"
+              >
+                ✏️
+              </button>
+            </div>
           )}
-
-          <div className="flex justify-end gap-2 mt-2">
-            <button
-              onClick={() => setIsAddingDocument(false)}
-              className="px-3 py-1 text-sm text-blue-500 hover:text-blue-700"
-            >
-              Cancel
-            </button>
-          </div>
         </div>
-      ) : isAddingDocument && !clinicId ? (
-        <div className="mt-3 p-3 bg-white rounded border border-red-100">
-          <div className="text-red-600 text-sm">
-            No clinic selected. Please select a clinic before uploading
-            documents.
-          </div>
-          <div className="flex justify-end mt-2">
-            <button
-              onClick={() => setIsAddingDocument(false)}
-              className="px-3 py-1 text-sm text-blue-500 hover:text-blue-700"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      ) : (
         <button
-          onClick={handleAddDocumentClick}
-          className={`w-full flex items-center justify-center gap-1 text-blue-500 hover:text-blue-700 py-2 px-4 border border-blue-200 rounded bg-white ${
-            !clinicId ? "opacity-70" : ""
-          }`}
+          onClick={() => onRemove(index)}
+          className="text-red-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50"
+          title="Remove record"
         >
-          <span>Add Document</span> <span>+</span>
+          ❌
         </button>
-      )}
+      </div>
 
-      {!isAddingDocument && uploadError && (
-        <div className="text-xs text-red-600 mt-2 p-2 bg-red-50 rounded">
-          {uploadError}
+      {/* Notes Section */}
+      <div className="mb-4">
+        <div className="flex items-center mb-2">
+          <span className="text-blue-400 mr-1">📝</span>
+          <h4 className="font-medium text-blue-600">Notes</h4>
+          {!isEditingNotes && (
+            <button
+              onClick={() => setIsEditingNotes(true)}
+              className="ml-2 text-blue-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50"
+              title="Edit notes"
+            >
+              ✏️
+            </button>
+          )}
         </div>
-      )}
+
+        {isEditingNotes ? (
+          <div>
+            <textarea
+              value={notesValue}
+              onChange={handleNotesChange}
+              className="w-full px-3 py-2 border border-blue-200 rounded-lg bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 min-h-[100px]"
+              placeholder="Enter notes about this visit..."
+            />
+            <div className="flex justify-end mt-2 space-x-2">
+              <button
+                onClick={() => setIsEditingNotes(false)}
+                className="px-3 py-1 text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleNotesSubmit}
+                className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
+              >
+                Save Notes
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-blue-50 p-3 rounded-lg">
+            {record.notes ? (
+              <p className="text-gray-700 whitespace-pre-wrap">{record.notes}</p>
+            ) : (
+              <p className="text-gray-500 italic">No notes for this visit</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Documents Section */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center">
+            <span className="text-blue-400 mr-1">📁</span>
+            <h4 className="font-medium text-blue-600">Documents</h4>
+          </div>
+          <button
+            onClick={handleAddDocumentClick}
+            className="text-sm bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-200 flex items-center gap-1"
+            disabled={!clinicId}
+          >
+            <span>+</span> Add Document
+          </button>
+        </div>
+
+        {/* Document Upload Form */}
+        {isAddingDocument && clinicId && (
+          <div className="mb-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+            <DocumentUpload
+              clinicId={clinicId}
+              patientId={patientId}
+              onAddDocument={handleUploadComplete}
+              onCancel={() => setIsAddingDocument(false)}
+            />
+          </div>
+        )}
+
+        {/* Documents List */}
+        {record.document_urls && record.document_urls.length > 0 ? (
+          <div className="space-y-2">
+            {record.document_urls.map((url, docIndex) => (
+              <div key={docIndex} className="relative">
+                <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xl">{getFileIcon(url)}</span>
+                    <span className="text-gray-700 truncate max-w-md">
+                      {getFilenameFromUrl(url)}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    {isImageFile(url) && (
+                      <button
+                        onClick={() => togglePreview(url)}
+                        className="text-sm bg-green-100 text-green-600 px-2 py-1 rounded hover:bg-green-200"
+                      >
+                        {previewUrl === url ? "Hide" : "View"}
+                      </button>
+                    )}
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200"
+                    >
+                      Open
+                    </a>
+                    <button
+                      onClick={() => onRemoveDocument(index, docIndex)}
+                      className="text-sm bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 ml-1"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Image Preview */}
+                {previewUrl === url && isImageFile(url) && (
+                  <div className="mt-2 p-2 bg-gray-100 rounded-lg">
+                    <img 
+                      src={url} 
+                      alt="Document preview" 
+                      className="max-w-full max-h-64 object-contain mx-auto border border-gray-300 rounded"
+                    />
+                    <button
+                      onClick={() => setPreviewUrl(null)}
+                      className="mt-2 mx-auto block text-sm bg-gray-200 text-gray-600 px-2 py-1 rounded hover:bg-gray-300"
+                    >
+                      Close Preview
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-blue-50 p-3 rounded-lg text-center">
+            <p className="text-gray-500 italic">No documents attached</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
