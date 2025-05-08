@@ -232,12 +232,53 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     });
   };
 
-  const handleRemoveRecord = (index: number) => {
-    if (confirm("Are you sure you want to remove this record?")) {
-      setPatient((prev) => ({
-        ...prev,
-        history: prev.history?.filter((_, i) => i !== index),
-      }));
+  const handleRemoveRecord = async (index: number) => {
+    if (
+      confirm(
+        "Are you sure you want to remove this record? This will also delete any attached documents."
+      )
+    ) {
+      try {
+        // Check if the record has documents
+        const recordToDelete = patient.history?.[index];
+
+        if (
+          recordToDelete?.document_urls &&
+          recordToDelete.document_urls.length > 0
+        ) {
+          // Delete all documents from Cloudinary first
+          const response = await fetch("/api/upload/batch-delete", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              urls: recordToDelete.document_urls,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (!result.success) {
+            console.warn(
+              "Some files could not be deleted from storage",
+              result
+            );
+            // You might want to show a warning to the user
+          }
+        }
+
+        // Then remove from local state
+        setPatient((prev) => ({
+          ...prev,
+          history: prev.history?.filter((_, i) => i !== index),
+        }));
+      } catch (error) {
+        console.error("Error removing record:", error);
+        alert(
+          "There was a problem deleting the record. Some files might not have been removed."
+        );
+      }
     }
   };
 
@@ -341,7 +382,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
       <ErrorScreen
         title="Patient Data Error"
         error={"Failed to load patient data"}
-        retry={() => 
+        retry={() =>
           dispatch(fetchPatientById({ patientId, clinicId: clinicId || "" }))
         }
         goBack={() => router.push("/dashboard")}
@@ -418,7 +459,9 @@ export default function EditPatient({ params }: { params: { id: string } }) {
             <div className="lg:col-span-2">
               <MedicalHistorySection
                 patientId={patientId}
-                clinicId={selectedClinic ? toIdString(selectedClinic._id) : undefined}
+                clinicId={
+                  selectedClinic ? toIdString(selectedClinic._id) : undefined
+                }
                 historyRecords={patient.history || []}
                 onAddRecord={handleAddRecord}
                 onUpdateRecord={handleUpdateRecord}

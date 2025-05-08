@@ -67,7 +67,7 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
       ...record,
       notes: notesValue,
     };
-    
+
     // You'll need to add a new function in the parent component
     // to handle updating notes specifically
     // For now, let's assume we can use onUpdateDate as a workaround
@@ -86,6 +86,36 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
   const handleUploadComplete = (url: string) => {
     onAddDocument(index, url);
     setIsAddingDocument(false);
+  };
+
+  const handleRemoveDocumentClick = async (url: string, docIndex: number) => {
+    if (confirm("Are you sure you want to delete this document?")) {
+      try {
+        // First, delete from Cloudinary
+        const response = await fetch(
+          `/api/upload/${patientId}?url=${encodeURIComponent(url)}`,
+          {
+            method: "DELETE",
+          }
+        );
+
+        const data = await response.json();
+
+        if (!data.success) {
+          console.error("Error deleting file from Cloudinary:", data.error);
+          alert(
+            "There was a problem deleting the file from storage. Please try again."
+          );
+          return;
+        }
+
+        // If Cloudinary deletion was successful, remove from UI/database
+        onRemoveDocument(index, docIndex);
+      } catch (error) {
+        console.error("Error deleting document:", error);
+        alert("Failed to delete document. Please try again.");
+      }
+    }
   };
 
   // Extract filename from URL
@@ -216,7 +246,9 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
         ) : (
           <div className="bg-blue-50 p-3 rounded-lg">
             {record.notes ? (
-              <p className="text-gray-700 whitespace-pre-wrap">{record.notes}</p>
+              <p className="text-gray-700 whitespace-pre-wrap">
+                {record.notes}
+              </p>
             ) : (
               <p className="text-gray-500 italic">No notes for this visit</p>
             )}
@@ -282,20 +314,20 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
                       Open
                     </a>
                     <button
-                      onClick={() => onRemoveDocument(index, docIndex)}
+                      onClick={() => handleRemoveDocumentClick(url, docIndex)}
                       className="text-sm bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 ml-1"
                     >
                       Delete
                     </button>
                   </div>
                 </div>
-                
+
                 {/* Image Preview */}
                 {previewUrl === url && isImageFile(url) && (
                   <div className="mt-2 p-2 bg-gray-100 rounded-lg">
-                    <img 
-                      src={url} 
-                      alt="Document preview" 
+                    <img
+                      src={url}
+                      alt="Document preview"
                       className="max-w-full max-h-64 object-contain mx-auto border border-gray-300 rounded"
                     />
                     <button

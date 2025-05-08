@@ -1,6 +1,6 @@
 // src/app/api/clinic/[id]/files/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getClinicResources } from '@/utils/cloudinaryUploader';
+import { deleteFromCloudinary, extractPublicIdFromUrl, getClinicResources } from '@/utils/cloudinaryUploader';
 import { dbConnect } from '@/db';
 import { isValidObjectId } from 'mongoose';
 import { Clinic } from '@/models';
@@ -83,3 +83,48 @@ export async function GET(
     );
   }
 }
+
+export async function DELETE(
+    request: NextRequest,
+    { params }: { params: { id: string } }
+  ) {
+    try {
+      const { searchParams } = new URL(request.url);
+      const fileUrl = searchParams.get('url');
+      
+      if (!fileUrl) {
+        return NextResponse.json(
+          { success: false, error: 'File URL is required' },
+          { status: 400 }
+        );
+      }
+      
+      // Extract the public ID from the URL
+      const publicId = extractPublicIdFromUrl(fileUrl);
+      
+      if (!publicId) {
+        return NextResponse.json(
+          { success: false, error: 'Could not extract public ID from URL' },
+          { status: 400 }
+        );
+      }
+      
+      // Delete from Cloudinary
+      const result = await deleteFromCloudinary(publicId);
+      
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: 500 }
+        );
+      }
+      
+      return NextResponse.json({ success: true });
+    } catch (error: any) {
+      console.error('Delete file error:', error);
+      return NextResponse.json(
+        { success: false, error: error.message || 'Failed to delete file' },
+        { status: 500 }
+      );
+    }
+  }
