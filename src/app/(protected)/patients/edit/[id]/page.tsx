@@ -83,6 +83,8 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     undefined
   );
 
+  const noClinicSelected = !selectedClinic;
+
   // Local state for managing history record updates
   const [isAddingRecord, setIsAddingRecord] = useState<boolean>(false);
   const [currentRecord, setCurrentRecord] = useState<IHistoryRecord>({
@@ -606,9 +608,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                             ? toIdString(selectedClinic._id)
                             : undefined
                         }
-                        patientId={toIdString(
-                          patient._id as string | Types.ObjectId
-                        )}
+                        patientId={toIdString(patient._id as string | Types.ObjectId)}
                         onRemove={handleRemoveRecord}
                         onUpdateDate={handleUpdateRecordDate}
                         onAddDocument={handleAddDocument}
@@ -625,6 +625,19 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                       >
                         Add First Record
                       </button>
+                    </div>
+                  )}
+
+                  {/* Show a warning if no clinic is selected */}
+                  {noClinicSelected && (
+                    <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <p className="text-yellow-700 flex items-center gap-2">
+                        <span>⚠️</span>
+                        <span>
+                          Please select a clinic from the sidebar to enable
+                          document uploads.
+                        </span>
+                      </p>
                     </div>
                   )}
                 </div>
