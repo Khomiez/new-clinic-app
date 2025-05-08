@@ -22,6 +22,7 @@ import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
 import DocumentUpload from "@/components/ui/DocumentUpload";
+import { Types } from "mongoose";
 
 // Helper function to format date for input fields
 const formatDateForInput = (date: string | Date | undefined): string => {
@@ -600,6 +601,14 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                         key={index}
                         record={record}
                         index={index}
+                        clinicId={
+                          selectedClinic
+                            ? toIdString(selectedClinic._id)
+                            : undefined
+                        }
+                        patientId={toIdString(
+                          patient._id as string | Types.ObjectId
+                        )}
                         onRemove={handleRemoveRecord}
                         onUpdateDate={handleUpdateRecordDate}
                         onAddDocument={handleAddDocument}

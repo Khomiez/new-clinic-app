@@ -6,6 +6,8 @@ import FileUploader from "./FileUploader";
 interface HistoryRecordProps {
   record: IHistoryRecord;
   index: number;
+  clinicId?: string; // Added clinicId prop
+  patientId?: string; // Added patientId prop
   onRemove: (index: number) => void;
   onUpdateDate: (index: number, newDate: Date) => void;
   onAddDocument: (index: number, url: string) => void;
@@ -15,11 +17,12 @@ interface HistoryRecordProps {
 const HistoryRecord: React.FC<HistoryRecordProps> = ({
   record,
   index,
+  clinicId,
+  patientId,
   onRemove,
   onUpdateDate,
   onAddDocument,
   onRemoveDocument,
-  clinicId,
 }) => {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [dateValue, setDateValue] = useState(
@@ -28,7 +31,7 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
       : new Date(record.timestamp).toISOString().split("T")[0]
   );
   const [isAddingDocument, setIsAddingDocument] = useState(false);
-  const [newDocumentUrl, setNewDocumentUrl] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null); // Added missing state
 
   // Format the date nicely
   const formatDate = (dateString: string | Date): string => {
@@ -49,12 +52,10 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
     setIsEditingDate(false);
   };
 
-  const handleAddDocument = () => {
-    if (newDocumentUrl.trim()) {
-      onAddDocument(index, newDocumentUrl.trim());
-      setNewDocumentUrl("");
-      setIsAddingDocument(false);
-    }
+  // Handle document upload completion
+  const handleDocumentUpload = (url: string) => {
+    onAddDocument(index, url);
+    setIsAddingDocument(false);
   };
 
   // Extract filename from URL
@@ -170,17 +171,23 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
       {/* Add Document section */}
       {isAddingDocument ? (
         <div className="mt-3 p-3 bg-white rounded border border-blue-100">
-          <FileUploader
-            clinicId={clinicId}
-            patientId={patientId} // You'd need to pass this from a parent component
-            onUploadComplete={(url) => {
-              handleAddDocument(url);
-              setIsAddingDocument(false);
-            }}
-            onUploadError={(error) => {
-              setUploadError(error); // Add this state variable
-            }}
-          />
+          {clinicId ? (
+            <FileUploader
+              clinicId={clinicId}
+              patientId={patientId}
+              onUploadComplete={handleDocumentUpload}
+              onUploadError={(error) => setUploadError(error)}
+            />
+          ) : (
+            <div className="text-sm text-red-500 p-2">
+              Cannot upload documents: Clinic ID is required
+            </div>
+          )}
+          
+          {uploadError && (
+            <div className="text-sm text-red-500 mt-2">{uploadError}</div>
+          )}
+          
           <div className="flex justify-end gap-2 mt-2">
             <button
               onClick={() => setIsAddingDocument(false)}
