@@ -1,6 +1,7 @@
 // src/components/ui/HistoryRecord.tsx
-import React, { useState } from 'react';
-import { IHistoryRecord } from '@/interfaces';
+import React, { useState } from "react";
+import { IHistoryRecord } from "@/interfaces";
+import FileUploader from "./FileUploader";
 
 interface HistoryRecordProps {
   record: IHistoryRecord;
@@ -11,30 +12,31 @@ interface HistoryRecordProps {
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
 }
 
-const HistoryRecord: React.FC<HistoryRecordProps> = ({ 
-  record, 
+const HistoryRecord: React.FC<HistoryRecordProps> = ({
+  record,
   index,
   onRemove,
   onUpdateDate,
   onAddDocument,
-  onRemoveDocument
+  onRemoveDocument,
+  clinicId,
 }) => {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [dateValue, setDateValue] = useState(
-    record.timestamp instanceof Date 
-      ? record.timestamp.toISOString().split('T')[0]
-      : new Date(record.timestamp).toISOString().split('T')[0]
+    record.timestamp instanceof Date
+      ? record.timestamp.toISOString().split("T")[0]
+      : new Date(record.timestamp).toISOString().split("T")[0]
   );
   const [isAddingDocument, setIsAddingDocument] = useState(false);
-  const [newDocumentUrl, setNewDocumentUrl] = useState('');
+  const [newDocumentUrl, setNewDocumentUrl] = useState("");
 
   // Format the date nicely
   const formatDate = (dateString: string | Date): string => {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     }).format(date);
   };
 
@@ -50,22 +52,23 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
   const handleAddDocument = () => {
     if (newDocumentUrl.trim()) {
       onAddDocument(index, newDocumentUrl.trim());
-      setNewDocumentUrl('');
+      setNewDocumentUrl("");
       setIsAddingDocument(false);
     }
   };
 
   // Extract filename from URL
   const getFilenameFromUrl = (url: string): string => {
-    return url.split('/').pop() || `Document`;
+    return url.split("/").pop() || `Document`;
   };
 
   // Determine file type icon based on extension
   const getFileIcon = (url: string): string => {
-    if (url.endsWith('.pdf')) return '📕';
-    if (url.endsWith('.jpg') || url.endsWith('.png') || url.endsWith('.jpeg')) return '🖼️';
-    if (url.endsWith('.docx') || url.endsWith('.doc')) return '📝';
-    return '📄'; // Default document icon
+    if (url.endsWith(".pdf")) return "📕";
+    if (url.endsWith(".jpg") || url.endsWith(".png") || url.endsWith(".jpeg"))
+      return "🖼️";
+    if (url.endsWith(".docx") || url.endsWith(".doc")) return "📝";
+    return "📄"; // Default document icon
   };
 
   return (
@@ -81,13 +84,13 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
                 onChange={handleDateChange}
                 className="px-2 py-1 border border-blue-200 rounded"
               />
-              <button 
+              <button
                 onClick={handleDateSubmit}
                 className="bg-blue-100 text-blue-700 px-2 py-1 text-sm rounded hover:bg-blue-200"
               >
                 Save
               </button>
-              <button 
+              <button
                 onClick={() => setIsEditingDate(false)}
                 className="text-red-500 hover:text-red-700 px-2 py-1 text-sm"
               >
@@ -129,7 +132,10 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
         {record.document_urls && record.document_urls.length > 0 ? (
           <div className="space-y-2">
             {record.document_urls.map((url, docIndex) => (
-              <div key={docIndex} className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+              <div
+                key={docIndex}
+                className="flex items-center justify-between bg-white p-2 rounded border border-blue-100"
+              >
                 <div className="flex items-center gap-2">
                   <span>{getFileIcon(url)}</span>
                   <span className="text-sm">{getFilenameFromUrl(url)}</span>
@@ -137,13 +143,11 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
                 <div className="flex gap-1">
                   <button
                     className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
-                    onClick={() => window.open(url, '_blank')}
+                    onClick={() => window.open(url, "_blank")}
                   >
                     View
                   </button>
-                  <button
-                    className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
-                  >
+                  <button className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded">
                     Replace
                   </button>
                   <button
@@ -157,32 +161,32 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
             ))}
           </div>
         ) : (
-          <div className="text-sm text-gray-500 italic">No documents available</div>
+          <div className="text-sm text-gray-500 italic">
+            No documents available
+          </div>
         )}
       </div>
 
       {/* Add Document section */}
       {isAddingDocument ? (
         <div className="mt-3 p-3 bg-white rounded border border-blue-100">
-          <input
-            type="text"
-            value={newDocumentUrl}
-            onChange={(e) => setNewDocumentUrl(e.target.value)}
-            placeholder="Enter document URL"
-            className="w-full px-3 py-2 border border-blue-200 rounded mb-2"
+          <FileUploader
+            clinicId={clinicId}
+            patientId={patientId} // You'd need to pass this from a parent component
+            onUploadComplete={(url) => {
+              handleAddDocument(url);
+              setIsAddingDocument(false);
+            }}
+            onUploadError={(error) => {
+              setUploadError(error); // Add this state variable
+            }}
           />
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 mt-2">
             <button
               onClick={() => setIsAddingDocument(false)}
               className="px-3 py-1 text-sm text-blue-500 hover:text-blue-700"
             >
               Cancel
-            </button>
-            <button
-              onClick={handleAddDocument}
-              className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              Add
             </button>
           </div>
         </div>
