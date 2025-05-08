@@ -1,5 +1,5 @@
 // src/components/ui/DocumentUpload.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 interface DocumentUploadProps {
   onAddDocument: (url: string) => void;
@@ -10,17 +10,27 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
   onAddDocument, 
   onCancel 
 }) => {
-  const [documentUrl, setDocumentUrl] = useState('');
-  const [documentName, setDocumentName] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState<string>('');
+  const [documentName, setDocumentName] = useState<string>('');
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   
   // This is a placeholder function - in a real app, you would integrate
   // with your file storage service (AWS S3, Firebase Storage, etc.)
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    setUploadError(null);
     
     if (!documentUrl.trim()) {
-      alert('Please enter a document URL');
+      setUploadError('Please enter a document URL');
+      return;
+    }
+    
+    // Basic URL validation
+    try {
+      new URL(documentUrl); // Will throw if not a valid URL
+    } catch (error) {
+      setUploadError('Please enter a valid URL');
       return;
     }
     
@@ -30,7 +40,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
       // Here's where you would normally upload the file to your storage
       // For this demo, we'll just use the provided URL
       
-      // Simulate an API call
+      // Simulate an API call with a slight delay
       await new Promise(resolve => setTimeout(resolve, 500));
       
       onAddDocument(documentUrl);
@@ -38,7 +48,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
       setDocumentName('');
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload document. Please try again.');
+      setUploadError('Failed to add document. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -83,6 +93,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
             Leave empty to use the filename from URL
           </p>
         </div>
+        
+        {uploadError && (
+          <div className="text-red-500 text-sm py-1 px-2 bg-red-50 rounded border border-red-100">
+            {uploadError}
+          </div>
+        )}
         
         <div className="flex justify-end space-x-2 pt-2">
           <button

@@ -2,7 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Navbar, Sidebar, LoadingScreen, ErrorScreen, PatientForm } from "@/components";
+import {
+  Navbar,
+  Sidebar,
+  LoadingScreen,
+  ErrorScreen,
+  PatientForm,
+} from "@/components";
 import HistoryRecord from "@/components/ui/HistoryRecord"; // Import the enhanced component
 import { IPatient, IClinic, IHistoryRecord } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
@@ -15,6 +21,7 @@ import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
 import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
+import DocumentUpload from "@/components/ui/DocumentUpload";
 
 // Helper function to format date for input fields
 const formatDateForInput = (date: string | Date | undefined): string => {
@@ -82,6 +89,9 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     document_urls: [],
     notes: "",
   });
+
+  const [isAddingDocument, setIsAddingDocument] = useState<boolean>(false);
+  const [newDocumentUrl, setNewDocumentUrl] = useState<string>("");
 
   // Fetch admin data and clinics when component mounts
   useEffect(() => {
@@ -185,38 +195,60 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     }
   };
 
+  const handleAddDocumentToNewRecord = (url: string) => {
+    setCurrentRecord((prev) => ({
+      ...prev,
+      document_urls: [...(prev.document_urls || []), url],
+    }));
+    setIsAddingDocument(false);
+  };
+
   // Add a new history record
   const handleAddRecord = () => {
     if (!currentRecord.timestamp) {
       alert("Date and time are required for the history record");
       return;
     }
-
+  
     setPatient((prev) => {
+      // Create a complete record with documents
+      const newRecord = {
+        timestamp: currentRecord.timestamp,
+        document_urls: currentRecord.document_urls || [],
+        notes: currentRecord.notes || ""
+      };
+      
       // Add the new record
-      const updatedHistory = [...(prev.history || []), currentRecord];
-
+      const updatedHistory = [...(prev.history || []), newRecord];
+  
       // Sort by date (newest first)
       const sortedHistory = updatedHistory.sort((a, b) => {
         const dateA = new Date(a.timestamp).getTime();
         const dateB = new Date(b.timestamp).getTime();
         return dateB - dateA;
       });
-
+  
       return {
         ...prev,
         history: sortedHistory,
       };
     });
-
-    // Reset record form
+  
+    // Reset record form and document adding state
     setCurrentRecord({
       timestamp: new Date(),
       document_urls: [],
       notes: "",
     });
-
+    setIsAddingDocument(false);
     setIsAddingRecord(false);
+  };
+
+  const handleRemoveDocumentFromNewRecord = (index: number) => {
+    setCurrentRecord((prev) => ({
+      ...prev,
+      document_urls: prev.document_urls?.filter((_, i) => i !== index) || [],
+    }));
   };
 
   // Remove a history record
@@ -335,6 +367,18 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     if (clinic) {
       setSelectedClinic(clinic);
     }
+  };
+
+  const getFilenameFromUrl = (url: string): string => {
+    return url.split("/").pop() || `Document`;
+  };
+
+  const getFileIcon = (url: string): string => {
+    if (url.endsWith(".pdf")) return "📕";
+    if (url.endsWith(".jpg") || url.endsWith(".png") || url.endsWith(".jpeg"))
+      return "🖼️";
+    if (url.endsWith(".docx") || url.endsWith(".doc")) return "📝";
+    return "📄"; // Default document icon
   };
 
   // Show loading screen

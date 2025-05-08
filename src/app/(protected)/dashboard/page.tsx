@@ -28,8 +28,8 @@ export default function AdminDashboard() {
   const selectedClinicId = useAppSelector((state) => state.settings.selectedClinicId);
   const dispatch = useAppDispatch();
 
-  // Local state for selected clinic
-  const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(undefined);
+  // Local state for selected clinic - RENAMED the setter to avoid conflict
+  const [selectedClinic, setSelectedClinicState] = useState<IClinic | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [filteredPatients, setFilteredPatients] = useState<IPatient[]>([]);
 
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
         );
         
         if (savedClinic) {
-          setSelectedClinic(savedClinic);
+          setSelectedClinicState(savedClinic);
           dispatch(fetchPatients(selectedClinicId));
           return;
         }
@@ -72,7 +72,7 @@ export default function AdminDashboard() {
       
       // Fallback to first clinic if no saved clinic or saved clinic not found
       if (!selectedClinic) {
-        setSelectedClinic(clinicsState.items[0]);
+        setSelectedClinicState(clinicsState.items[0]);
         const firstClinicId = toIdString(clinicsState.items[0]._id);
         // Store the clinic ID in Redux
         dispatch(setSelectedClinic(firstClinicId));
@@ -133,7 +133,7 @@ export default function AdminDashboard() {
     
     const clinic = clinicsState.items.find((c) => toIdString(c._id) === clinicId);
     if (clinic) {
-      setSelectedClinic(clinic);
+      setSelectedClinicState(clinic); // RENAMED from setSelectedClinic
       // Store the selected clinic ID in Redux
       dispatch(setSelectedClinic(clinicId));
       dispatch(fetchPatients(clinicId));
