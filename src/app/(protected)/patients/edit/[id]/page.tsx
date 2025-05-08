@@ -209,31 +209,31 @@ export default function EditPatient({ params }: { params: { id: string } }) {
       alert("Date and time are required for the history record");
       return;
     }
-  
+
     setPatient((prev) => {
       // Create a complete record with documents
       const newRecord = {
         timestamp: currentRecord.timestamp,
         document_urls: currentRecord.document_urls || [],
-        notes: currentRecord.notes || ""
+        notes: currentRecord.notes || "",
       };
-      
+
       // Add the new record
       const updatedHistory = [...(prev.history || []), newRecord];
-  
+
       // Sort by date (newest first)
       const sortedHistory = updatedHistory.sort((a, b) => {
         const dateA = new Date(a.timestamp).getTime();
         const dateB = new Date(b.timestamp).getTime();
         return dateB - dateA;
       });
-  
+
       return {
         ...prev,
         history: sortedHistory,
       };
     });
-  
+
     // Reset record form and document adding state
     setCurrentRecord({
       timestamp: new Date(),
@@ -476,7 +476,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                     <h3 className="text-md font-medium text-blue-700 mb-3">
                       Add New Record
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-slate-600 mb-1">
                           Date and Time <span className="text-red-500">*</span>
@@ -491,6 +491,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                           className="w-full px-3 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
                         />
                       </div>
+
                       <div>
                         <label className="block text-sm font-medium text-slate-600 mb-1">
                           Notes
@@ -504,10 +505,77 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                           placeholder="Enter notes about this visit..."
                         />
                       </div>
-                      <div className="flex space-x-2 justify-end">
+
+                      {/* Documents Section - NEW */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-2">
+                          Documents
+                        </label>
+
+                        {/* Show documents that have been added to this new record */}
+                        {currentRecord.document_urls &&
+                        currentRecord.document_urls.length > 0 ? (
+                          <div className="space-y-2 mb-3">
+                            {currentRecord.document_urls.map(
+                              (url, docIndex) => (
+                                <div
+                                  key={docIndex}
+                                  className="flex items-center justify-between bg-white p-2 rounded border border-blue-100"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>{getFileIcon(url)}</span>
+                                    <span className="text-sm">
+                                      {getFilenameFromUrl(url)}
+                                    </span>
+                                  </div>
+                                  <button
+                                    className="text-xs bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded"
+                                    onClick={() =>
+                                      handleRemoveDocumentFromNewRecord(
+                                        docIndex
+                                      )
+                                    }
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-500 italic mb-2">
+                            No documents attached yet
+                          </div>
+                        )}
+
+                        {/* Document upload form */}
+                        {isAddingDocument ? (
+                          <DocumentUpload
+                            onAddDocument={handleAddDocumentToNewRecord}
+                            onCancel={() => setIsAddingDocument(false)}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingDocument(true)}
+                            className="w-full flex items-center justify-center gap-1 text-blue-500 hover:text-blue-700 py-2 px-4 border border-blue-200 rounded bg-white mb-3"
+                          >
+                            <span>Add Document</span> <span>+</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex space-x-2 justify-end pt-2">
                         <button
                           type="button"
-                          onClick={() => setIsAddingRecord(false)}
+                          onClick={() => {
+                            setIsAddingRecord(false);
+                            setCurrentRecord({
+                              timestamp: new Date(),
+                              document_urls: [],
+                              notes: "",
+                            });
+                          }}
                           className="px-3 py-1.5 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50"
                         >
                           Cancel
