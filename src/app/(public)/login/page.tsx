@@ -40,10 +40,10 @@ export default function Login() {
               <span className="text-4xl">👩‍⚕️</span>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-blue-800">Staff Portal</h1>
-          <p className="text-blue-400 mt-2">
-            Welcome back to the clinic system
-          </p>
+          <h1 className="text-2xl font-bold text-blue-800">
+            เข้าสู่ระบบเจ้าหน้าที่
+          </h1>
+          <p className="text-blue-400 mt-2">ยินดีต้อนรับกลับสู่ระบบจัดการคลินิก</p>
         </div>
 
         {/* Login Form */}
@@ -51,13 +51,12 @@ export default function Login() {
           <div>
             <label
               className="block text-sm font-medium text-blue-700 mb-2"
-              htmlFor="email"
             >
-              Email Address
+              ชื่อผู้ใช้
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span className="text-blue-400">📧</span>
+                <span className="text-blue-400">👤</span>
               </div>
               <input
                 id="username"
@@ -68,7 +67,7 @@ export default function Login() {
                 onChange={(e) => setUsername(e.target.value)}
                 className="font-bold block w-full pl-10 pr-3 py-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 focus:outline-none"
                 style={{ color: "var(--text-deep-blue)" }}
-                placeholder="your.name@clinic.com"
+                placeholder="ีusername"
               />
             </div>
           </div>
@@ -78,7 +77,7 @@ export default function Login() {
               className="block text-sm font-medium text-blue-700 mb-2"
               htmlFor="password"
             >
-              Password
+              รหัสผ่าน
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -98,7 +97,7 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          {/* <div className="flex items-center justify-between">
             <div className="flex items-center">
               <input
                 id="remember-me"
@@ -122,15 +121,14 @@ export default function Login() {
                 Forgot password?
               </Link>
             </div>
-          </div>
+          </div> */}
 
           <div>
             <button
               type="submit"
               className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-400 transition-colors"
             >
-              <span className="mr-2">🚪</span>
-              Sign in to Portal
+              เข้าสู่ระบบ
             </button>
           </div>
         </form>
@@ -144,8 +142,8 @@ export default function Login() {
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-blue-100 text-center">
           <p className="text-sm text-blue-400">
-            Need help? Contact <span className="font-medium">IT Support</span>{" "}
-            at ext. 1234
+            ต้องการความช่วยเหลือ?<br/>ติดต่อ <span className="font-medium">IT Support</span>{" "}
+            khom2559@gmail.com
           </p>
           <p className="text-xs text-blue-300 mt-2">
             © 2025 Medical Clinic Staff

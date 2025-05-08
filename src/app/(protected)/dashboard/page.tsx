@@ -3,12 +3,22 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Sidebar, Navbar, LoadingScreen, ErrorScreen, Card } from "@/components";
+import {
+  Sidebar,
+  Navbar,
+  LoadingScreen,
+  ErrorScreen,
+  Card,
+} from "@/components";
 import { IClinic, IPatient } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
 import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
-import { fetchPatients, deletePatient, clearPatients } from "@/redux/features/patients/patientsSlice";
+import {
+  fetchPatients,
+  deletePatient,
+  clearPatients,
+} from "@/redux/features/patients/patientsSlice";
 import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { setSelectedClinic } from "@/redux/features/settings/settingsSlice";
 import { useAuth } from "@/context";
@@ -16,7 +26,7 @@ import { toIdString } from "@/utils/mongoHelpers";
 
 // Format date for display
 const formatDate = (date: Date | string | undefined): string => {
-  if (!date) return 'N/A';
+  if (!date) return "N/A";
   return new Date(date).toLocaleDateString();
 };
 
@@ -25,11 +35,15 @@ export default function AdminDashboard() {
   const adminInfo = useAppSelector((state) => state.admin);
   const clinicsState = useAppSelector((state) => state.clinics);
   const patientsState = useAppSelector((state) => state.patients);
-  const selectedClinicId = useAppSelector((state) => state.settings.selectedClinicId);
+  const selectedClinicId = useAppSelector(
+    (state) => state.settings.selectedClinicId
+  );
   const dispatch = useAppDispatch();
 
   // Local state for selected clinic - RENAMED the setter to avoid conflict
-  const [selectedClinic, setSelectedClinicState] = useState<IClinic | undefined>(undefined);
+  const [selectedClinic, setSelectedClinicState] = useState<
+    IClinic | undefined
+  >(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [filteredPatients, setFilteredPatients] = useState<IPatient[]>([]);
 
@@ -53,8 +67,8 @@ export default function AdminDashboard() {
   // Set the selected clinic based on persisted selection or default to first clinic
   useEffect(() => {
     if (
-      clinicsState.loading === "succeeded" && 
-      Array.isArray(clinicsState.items) && 
+      clinicsState.loading === "succeeded" &&
+      Array.isArray(clinicsState.items) &&
       clinicsState.items.length > 0
     ) {
       // If we have a saved clinic ID in Redux, try to use that first
@@ -62,14 +76,14 @@ export default function AdminDashboard() {
         const savedClinic = clinicsState.items.find(
           (c) => toIdString(c._id) === selectedClinicId
         );
-        
+
         if (savedClinic) {
           setSelectedClinicState(savedClinic);
           dispatch(fetchPatients(selectedClinicId));
           return;
         }
       }
-      
+
       // Fallback to first clinic if no saved clinic or saved clinic not found
       if (!selectedClinic) {
         setSelectedClinicState(clinicsState.items[0]);
@@ -79,18 +93,28 @@ export default function AdminDashboard() {
         dispatch(fetchPatients(firstClinicId));
       }
     }
-  }, [clinicsState.loading, clinicsState.items, selectedClinic, selectedClinicId, dispatch]);
+  }, [
+    clinicsState.loading,
+    clinicsState.items,
+    selectedClinic,
+    selectedClinicId,
+    dispatch,
+  ]);
 
   // Filter patients based on search term
   useEffect(() => {
-    if (patientsState.loading === "succeeded" && Array.isArray(patientsState.items)) {
+    if (
+      patientsState.loading === "succeeded" &&
+      Array.isArray(patientsState.items)
+    ) {
       const filtered = patientsState.items.filter(
         (patient) =>
           patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
           patient.HN_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (patient.ID_code && patient.ID_code.toLowerCase().includes(searchTerm.toLowerCase()))
+          (patient.ID_code &&
+            patient.ID_code.toLowerCase().includes(searchTerm.toLowerCase()))
       );
-      
+
       setFilteredPatients(filtered);
     } else {
       setFilteredPatients([]);
@@ -107,7 +131,11 @@ export default function AdminDashboard() {
 
   const handleEditPatient = (patient: IPatient): void => {
     if (selectedClinic) {
-      router.push(`/patients/edit/${toIdString(patient._id)}?clinicId=${toIdString(selectedClinic._id)}`);
+      router.push(
+        `/patients/edit/${toIdString(patient._id)}?clinicId=${toIdString(
+          selectedClinic._id
+        )}`
+      );
     }
   };
 
@@ -116,22 +144,26 @@ export default function AdminDashboard() {
       alert("No clinic selected");
       return;
     }
-    
+
     if (confirm("Are you sure you want to delete this patient?")) {
-      dispatch(deletePatient({ 
-        clinicId: toIdString(selectedClinic._id), 
-        patientId
-      }));
+      dispatch(
+        deletePatient({
+          clinicId: toIdString(selectedClinic._id),
+          patientId,
+        })
+      );
     }
   };
 
   const handleClinicChange = (clinicId: string): void => {
     if (!clinicId) return;
-  
+
     // Clear patients when changing clinic
     dispatch(clearPatients());
-    
-    const clinic = clinicsState.items.find((c) => toIdString(c._id) === clinicId);
+
+    const clinic = clinicsState.items.find(
+      (c) => toIdString(c._id) === clinicId
+    );
     if (clinic) {
       setSelectedClinicState(clinic); // RENAMED from setSelectedClinic
       // Store the selected clinic ID in Redux
@@ -157,7 +189,9 @@ export default function AdminDashboard() {
   }
 
   // Get the patients count
-  const patientsCount = Array.isArray(patientsState.items) ? patientsState.items.length : 0;
+  const patientsCount = Array.isArray(patientsState.items)
+    ? patientsState.items.length
+    : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
@@ -181,12 +215,12 @@ export default function AdminDashboard() {
         <div className="flex-grow p-8">
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-blue-800 mb-2">
-              Patient Management
+              จัดการผู้ป่วย
             </h2>
-            <p className="text-blue-400">Manage your patients and medical records</p>
+            <p className="text-blue-400">จัดการผู้ป่วยและเวชระเบียนของคุณ</p>
             {selectedClinic && (
               <p className="text-blue-500 mt-2">
-                Current Clinic: <strong>{selectedClinic.name}</strong>
+                คลินิกปัจจุบัน: <strong>{selectedClinic.name}</strong>
               </p>
             )}
           </div>
@@ -194,26 +228,26 @@ export default function AdminDashboard() {
           {/* Dashboard Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card
-              cardTopic="Total Patients"
+              cardTopic="ผู้ป่วยทั้งหมด"
               cardEmoji="👥"
               cardValue={patientsCount || 0}
-              cardDescription1="↑ 2 "
-              cardDescription2="from last month"
+              cardDescription1="↑ 2 คน "
+              cardDescription2="จากเดือนที่แล้ว"
             />
             <Card
-              cardTopic="Today's Appointments"
+              cardTopic="ยอดผู้ป่วยวันนี้"
               cardEmoji="✅"
               cardValue={10}
-              cardDescription1="→ 5"
-              cardDescription2="remaining today"
+              cardDescription1="↑ 5 คน "
+              cardDescription2="จากเมื่อวาน"
             />
             <Card
-              cardTopic="Patient Records"
+              cardTopic="รายการผู้ป่วยที่แสดง"
               cardEmoji="📝"
               cardValue={filteredPatients.length}
               cardDescription1="🔍 "
               cardDescription2={
-                searchTerm ? "Filtered results" : "All records shown"
+                searchTerm ? "รายการที่ผ่านการกรอง" : "รายการทั้งหมด"
               }
             />
           </div>
@@ -221,8 +255,8 @@ export default function AdminDashboard() {
           {/* Patient List Section */}
           <div className="bg-white p-6 rounded-xl shadow-md border border-blue-100">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-blue-800">
-                Patient Records
+              <h3 className="text-2xl font-bold text-blue-800">
+                เวชระเบียนผู้ป่วย
               </h3>
               <button
                 onClick={handleAddPatient}
@@ -230,7 +264,7 @@ export default function AdminDashboard() {
                 disabled={!selectedClinic}
               >
                 <span className="mr-2">➕</span>
-                Add Patient
+                เพิ่มผู้ป่วย
               </button>
             </div>
 
@@ -242,11 +276,13 @@ export default function AdminDashboard() {
                 </div>
                 <input
                   type="text"
-                  placeholder="Search patients by name, HN code, or ID code..."
+                  placeholder="ค้นหาด้วย ชื่อ-สกุล, HN code, หรือ รหัสประชาชน..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 focus:outline-none"
-                  disabled={!selectedClinic || patientsState.loading !== "succeeded"}
+                  disabled={
+                    !selectedClinic || patientsState.loading !== "succeeded"
+                  }
                 />
               </div>
             </div>
@@ -257,22 +293,22 @@ export default function AdminDashboard() {
                 <thead>
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
-                      Name
+                      ชื่อ-สกุล
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
                       HN CODE
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
-                      ID CODE
+                      รหัสประชาชน
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
-                      LAST VISIT
+                      ใช้บริการล่าสุด
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
-                      UPDATED DATE
+                      แก้ไขล่าสุด
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-blue-400 uppercase tracking-wider">
-                      ACTIONS
+                      จัดการ{" (แก้ไข/ลบ)"}
                     </th>
                   </tr>
                 </thead>
@@ -290,10 +326,14 @@ export default function AdminDashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{patient.HN_code}</div>
+                        <div className="text-sm text-gray-900">
+                          {patient.HN_code}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{patient.ID_code || 'N/A'}</div>
+                        <div className="text-sm text-gray-900">
+                          {patient.ID_code || "N/A"}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500">
                         {formatDate(patient.lastVisit || patient.createdAt)}
@@ -310,7 +350,9 @@ export default function AdminDashboard() {
                           ✏️
                         </button>
                         <button
-                          onClick={() => handleDeletePatient(toIdString(patient._id))}
+                          onClick={() =>
+                            handleDeletePatient(toIdString(patient._id))
+                          }
                           className="text-red-500 hover:text-red-700"
                           aria-label="Delete patient"
                         >
@@ -337,7 +379,8 @@ export default function AdminDashboard() {
                   <p>Error loading patients: {patientsState.error}</p>
                   <button
                     onClick={() =>
-                      selectedClinic && dispatch(fetchPatients(toIdString(selectedClinic._id)))
+                      selectedClinic &&
+                      dispatch(fetchPatients(toIdString(selectedClinic._id)))
                     }
                     className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
                   >
@@ -347,50 +390,51 @@ export default function AdminDashboard() {
               )}
 
               {/* Empty state - no patients for clinic */}
-              {patientsState.loading === "succeeded" && patientsState.items.length === 0 && selectedClinic && (
-                <div className="text-center py-8 text-blue-500">
-                  <div className="text-3xl mb-2">📋</div>
-                  <p>No patients are currently registered for this clinic.</p>
-                  <button
-                    onClick={handleAddPatient}
-                    className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                  >
-                    Add Your First Patient
-                  </button>
-                </div>
-              )}
+              {patientsState.loading === "succeeded" &&
+                patientsState.items.length === 0 &&
+                selectedClinic && (
+                  <div className="text-center py-8 text-blue-500">
+                    <div className="text-3xl mb-2">📋</div>
+                    <p>No patients are currently registered for this clinic.</p>
+                    <button
+                      onClick={handleAddPatient}
+                      className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                    >
+                      Add Your First Patient
+                    </button>
+                  </div>
+                )}
 
               {/* No search results */}
-              {patientsState.loading === "succeeded" && patientsState.items.length > 0 && filteredPatients.length === 0 && (
-                <div className="text-center py-8 text-blue-400">
-                  <div className="text-3xl mb-2">🔍</div>
-                  <p>No patients found matching your search criteria.</p>
-                </div>
-              )}
+              {patientsState.loading === "succeeded" &&
+                patientsState.items.length > 0 &&
+                filteredPatients.length === 0 && (
+                  <div className="text-center py-8 text-blue-400">
+                    <div className="text-3xl mb-2">🔍</div>
+                    <p>No patients found matching your search criteria.</p>
+                  </div>
+                )}
             </div>
 
             {/* Pagination - only show if there are patients */}
             {filteredPatients.length > 0 && (
               <div className="mt-6 flex items-center justify-between">
                 <div className="text-sm text-blue-600">
-                  Showing{" "}
+                  แสดง{" "}
                   <span className="font-medium">{filteredPatients.length}</span>{" "}
-                  of{" "}
-                  <span className="font-medium">
-                    {patientsCount}
-                  </span>{" "}
-                  patient records
+                  จากทั้งหมด{" "}
+                  <span className="font-medium">{patientsCount}</span> รายการ
                 </div>
 
                 <div className="flex space-x-2">
                   <button className="px-3 py-1 border border-blue-200 rounded text-blue-600 hover:bg-blue-50">
-                    Previous
+                    หน้าก่อน
                   </button>
                   <button className="px-3 py-1 bg-blue-100 border border-blue-200 rounded text-blue-800">
                     1
                   </button>
                   <button className="px-3 py-1 border border-blue-200 rounded text-blue-600 hover:bg-blue-50">
-                    Next
+                    หน้าถัดไป
                   </button>
                 </div>
               </div>

@@ -10,7 +10,7 @@ type Props = {
 const Navbar = ({ clinicName, adminUsername, logout }: Props) => {
   return (
     <nav className="bg-white shadow-sm border-b border-blue-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="min-w-7xl mx-4 px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <div className="text-3xl mr-2">🏥</div>
@@ -18,7 +18,7 @@ const Navbar = ({ clinicName, adminUsername, logout }: Props) => {
               <h1 className="text-xl font-bold text-blue-800">
                 {clinicName || "Medical Clinic"}
               </h1>
-              <p className="text-sm text-blue-400">Admin Portal</p>
+              <p className="text-sm text-blue-400">ระบบจัดการคลินิก</p>
             </div>
           </div>
           <div className="flex items-center">
@@ -26,7 +26,7 @@ const Navbar = ({ clinicName, adminUsername, logout }: Props) => {
               <p className="text-sm font-medium text-blue-800">
                 {adminUsername || "Admin User"}
               </p>
-              <p className="text-xs text-blue-400">Administrator</p>
+              <p className="text-xs text-blue-400">ผู้ดูแล</p>
             </div>
             <button
               onClick={() => logout()}

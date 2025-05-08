@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Prompt } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context";
 import { ReduxProvider } from "@/redux/provider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const prompt = Prompt({
+  subsets: ["latin", "thai"],
+  variable: "--font-prompt",
+  weight: ["300", "400", "500", "600", "700"], // Optional: customize weights
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -27,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${prompt.variable} antialiased`}
       >
         <ReduxProvider>
           <AuthProvider>{children}</AuthProvider>

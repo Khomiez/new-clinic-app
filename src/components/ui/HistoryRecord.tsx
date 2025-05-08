@@ -35,6 +35,7 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
   const [notesValue, setNotesValue] = useState(record.notes || "");
   const [isAddingDocument, setIsAddingDocument] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDeletingDoc, setIsDeletingDoc] = useState<number | null>(null);
 
   // Format the date nicely
   const formatDate = (dateString: string | Date): string => {
@@ -91,29 +92,38 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
   const handleRemoveDocumentClick = async (url: string, docIndex: number) => {
     if (confirm("Are you sure you want to delete this document?")) {
       try {
-        // First, delete from Cloudinary
+        if (!clinicId) {
+          throw new Error("Clinic ID is required to delete documents");
+        }
+
+        setIsDeletingDoc(docIndex);
+
+        // Use the correct endpoint with proper URL encoding
         const response = await fetch(
-          `/api/upload/${patientId}?url=${encodeURIComponent(url)}`,
+          `/api/clinic/${clinicId}/files?url=${encodeURIComponent(url)}`,
           {
             method: "DELETE",
           }
         );
 
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Server returned an error");
+        }
+
         const data = await response.json();
 
         if (!data.success) {
-          console.error("Error deleting file from Cloudinary:", data.error);
-          alert(
-            "There was a problem deleting the file from storage. Please try again."
-          );
-          return;
+          throw new Error(data.error || "Failed to delete from storage");
         }
 
         // If Cloudinary deletion was successful, remove from UI/database
         onRemoveDocument(index, docIndex);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error deleting document:", error);
-        alert("Failed to delete document. Please try again.");
+        alert(`Failed to delete document: ${error.message}. Please try again.`);
+      } finally {
+        setIsDeletingDoc(null);
       }
     }
   };
@@ -301,6 +311,7 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
                       <button
                         onClick={() => togglePreview(url)}
                         className="text-sm bg-green-100 text-green-600 px-2 py-1 rounded hover:bg-green-200"
+                        disabled={isDeletingDoc === docIndex}
                       >
                         {previewUrl === url ? "Hide" : "View"}
                       </button>
@@ -316,8 +327,9 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
                     <button
                       onClick={() => handleRemoveDocumentClick(url, docIndex)}
                       className="text-sm bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 ml-1"
+                      disabled={isDeletingDoc === docIndex}
                     >
-                      Delete
+                      {isDeletingDoc === docIndex ? "Deleting..." : "Delete"}
                     </button>
                   </div>
                 </div>
