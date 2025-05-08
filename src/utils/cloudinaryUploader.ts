@@ -1,6 +1,14 @@
 // src/utils/cloudinaryUploader.ts
 import { v2 as cloudinary } from 'cloudinary';
-import type { UploadApiResponse, UploadApiOptions, DeleteApiResponse } from 'cloudinary';
+import type { UploadApiResponse, UploadApiOptions } from 'cloudinary';
+
+// Configure Cloudinary (should be called once on server initialization)
+// You need to set CLOUDINARY_URL in your .env file
+cloudinary.config({
+  // This will use the CLOUDINARY_URL from env variables
+  // Format: cloudinary://API_KEY:API_SECRET@CLOUD_NAME
+  secure: true
+});
 
 // Define custom types that cover what we need
 interface CloudinaryResource {
@@ -17,16 +25,6 @@ interface CloudinaryResource {
     [key: string]: string;
   };
   tags?: string[];
-}
-
-// Define custom search response since it's not exported by the package
-interface CloudinarySearchResponse {
-  total_count: number;
-  time: number;
-  resources: CloudinaryResource[];
-  rate_limit_allowed: number;
-  rate_limit_reset_at: number;
-  rate_limit_remaining: number;
 }
 
 type UploadOptions = {
@@ -50,14 +48,6 @@ type UploadResponse = {
   error: string;
 };
 
-type DeleteResponse = {
-  success: true;
-  result: string; // DeleteApiResponse doesn't have result property as expected
-} | {
-  success: false;
-  error: string;
-};
-
 type GetResourcesResponse = {
   success: true;
   resources: CloudinaryResource[];
@@ -66,7 +56,10 @@ type GetResourcesResponse = {
   error: string;
 };
 
-export async function uploadToCloudinary(file: string | Buffer, options: UploadOptions): Promise<UploadResponse> {
+/**
+ * Uploads a file to Cloudinary with proper organization by clinic and patient
+ */
+export async function uploadToCloudinary(file: Buffer, options: UploadOptions): Promise<UploadResponse> {
   try {
     // Sanitize clinic name for folder path
     const sanitizedClinicName = options.clinicName
@@ -74,22 +67,18 @@ export async function uploadToCloudinary(file: string | Buffer, options: UploadO
       .replace(/[^a-z0-9]/g, '_');
     
     // Construct the folder path
-    const folder = `clinic_management_clinics/${sanitizedClinicName}`;
+    const folder = `clinic_management/${sanitizedClinicName}`;
     
-    // Extract file extension if filename is provided
-    let publicId = undefined;
-    if (options.filename) {
-      // Generate a unique public ID that includes clinic and patient info
-      publicId = `${folder}/${options.patientId || 'general'}_${Date.now()}`;
-    }
+    // Generate a unique public ID that includes clinic and patient info
+    const publicId = `${folder}/${options.patientId || 'general'}_${Date.now()}`;
     
     // Prepare upload options
+    // The UploadApiOptions type from cloudinary requires resource_type to be
+    // specifically one of: "image" | "auto" | "video" | "raw"
     const uploadOptions: UploadApiOptions = {
-      folder: folder,
+      folder,
       public_id: publicId,
-      overwrite: true,
-      resource_type: "auto",
-      upload_preset: "clinic_management",
+      resource_type: "auto", // TypeScript now knows this is one of the allowed literals
       tags: [...(options.tags || []), `clinic_${options.clinicId}`, 'patient_documents'],
       context: {
         clinic_id: options.clinicId,
@@ -98,17 +87,11 @@ export async function uploadToCloudinary(file: string | Buffer, options: UploadO
       }
     };
 
-    // Function overloads for Buffer vs string
-    let result: UploadApiResponse;
+    // Convert buffer to base64 string for upload
+    const base64File = `data:${options.fileType || 'application/octet-stream'};base64,${file.toString('base64')}`;
     
-    // If file is a Buffer, convert to base64 string
-    if (Buffer.isBuffer(file)) {
-      const base64File = `data:${options.fileType || 'application/octet-stream'};base64,${file.toString('base64')}`;
-      result = await cloudinary.uploader.upload(base64File, uploadOptions);
-    } else {
-      // It's already a string (could be a URL or base64)
-      result = await cloudinary.uploader.upload(file, uploadOptions);
-    }
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(base64File, uploadOptions);
     
     return {
       success: true,
@@ -127,70 +110,27 @@ export async function uploadToCloudinary(file: string | Buffer, options: UploadO
   }
 }
 
-// Helper function to delete files
-export async function deleteFromCloudinary(publicId: string): Promise<DeleteResponse> {
-  try {
-    const response = await cloudinary.uploader.destroy(publicId);
-    
-    // The response might be an object with result property or just a string
-    const result = typeof response === 'object' ? 
-      (response as any).result : // Cast to any to access possible result property
-      response as string;
-    
-    if (result === 'ok') {
-      return {
-        success: true as const,
-        result: result
-      };
-    } else {
-      return {
-        success: false,
-        error: `Delete failed with result: ${result}`
-      };
-    }
-  } catch (error: any) {
-    console.error('Cloudinary delete error:', error);
-    return {
-      success: false,
-      error: error.message || 'Delete failed'
-    };
-  }
-}
-
-// Get all resources for a specific clinic
+/**
+ * Get all resources for a specific clinic
+ */
 export async function getClinicResources(clinicId: string, clinicName: string): Promise<GetResourcesResponse> {
   try {
     const sanitizedClinicName = clinicName
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '_');
     
-    const folder = `clinic_management_clinics/${sanitizedClinicName}`;
+    const folder = `clinic_management/${sanitizedClinicName}`;
     
     const result = await cloudinary.search
       .expression(`folder:${folder}`)
       .with_field('context')
       .with_field('tags')
       .max_results(500)
-      .execute() as CloudinarySearchResponse;
-      
-    // Map the results to our CloudinaryResource type to ensure type safety
-    const resources = result.resources.map((resource: CloudinaryResource) => ({
-      public_id: resource.public_id,
-      secure_url: resource.secure_url,
-      url: resource.url,
-      format: resource.format,
-      resource_type: resource.resource_type,
-      created_at: resource.created_at,
-      bytes: resource.bytes,
-      width: resource.width,
-      height: resource.height,
-      context: resource.context,
-      tags: resource.tags
-    }));
+      .execute();
       
     return {
       success: true,
-      resources
+      resources: result.resources
     };
   } catch (error: any) {
     console.error('Cloudinary search error:', error);

@@ -2,14 +2,14 @@
 "use client";
 
 import React, { useState, useRef } from 'react';
-import { IClinic } from '@/interfaces';
 import { toIdString } from '@/utils/mongoHelpers';
 
 interface FileUploaderProps {
   clinicId: string;
   patientId?: string;
-  onUploadComplete?: (fileUrl: string) => void;
+  onUploadComplete: (fileUrl: string) => void;
   onUploadError?: (error: string) => void;
+  onCancel?: () => void;
   allowedTypes?: string; // e.g. "image/*,.pdf"
   maxSizeMB?: number; // Max file size in MB
 }
@@ -19,12 +19,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   patientId,
   onUploadComplete,
   onUploadError,
+  onCancel,
   allowedTypes = "image/*,.pdf,.doc,.docx,.xls,.xlsx",
   maxSizeMB = 10
 }) => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,15 +53,23 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       formData.append('clinicId', clinicId);
       if (patientId) formData.append('patientId', patientId);
       
-      // Simulating upload progress (real progress requires XMLHttpRequest)
+      // Create abort controller for cancellation
+      const controller = new AbortController();
+      setAbortController(controller);
+      
+      // Simulating upload progress with timeout (in real implementation, use XMLHttpRequest for actual progress)
       const progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + 10, 90));
-      }, 300);
+        setProgress(prev => {
+          const newProgress = Math.min(prev + 5, 90);
+          return newProgress;
+        });
+      }, 200);
       
       // Upload file
       const response = await fetch('/api/upload', {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal: controller.signal
       });
       
       clearInterval(progressInterval);
@@ -73,7 +83,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       
       const data = await response.json();
       
-      if (onUploadComplete) onUploadComplete(data.file.url);
+      if (data.success && data.file && data.file.url) {
+        onUploadComplete(data.file.url);
+      } else {
+        throw new Error('Invalid response from server');
+      }
       
       // Reset the file input
       if (fileInputRef.current) {
@@ -81,11 +95,36 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       }
       
     } catch (err: any) {
-      setError(err.message || 'Failed to upload file');
-      if (onUploadError) onUploadError(err.message || 'Failed to upload file');
+      // Check if this is an abort error
+      if (err.name === 'AbortError') {
+        setError('Upload cancelled');
+        if (onUploadError) onUploadError('Upload cancelled');
+      } else {
+        setError(err.message || 'Failed to upload file');
+        if (onUploadError) onUploadError(err.message || 'Failed to upload file');
+      }
     } finally {
       setIsUploading(false);
+      setAbortController(null);
     }
+  };
+
+  const handleCancel = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+    
+    // Reset states
+    setIsUploading(false);
+    setProgress(0);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    
+    if (onCancel) onCancel();
   };
 
   return (
@@ -124,17 +163,27 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       </div>
       
       {isUploading && (
-        <div className="w-full bg-gray-200 rounded-full h-2.5 my-2">
-          <div 
-            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-in-out" 
-            style={{ width: `${progress}%` }}
-          ></div>
-          <p className="text-xs text-blue-700 text-center mt-1">Uploading... {progress}%</p>
+        <div className="mt-4">
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+            <div 
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-in-out" 
+              style={{ width: `${progress}%` }}
+            ></div>
+          </div>
+          <div className="flex justify-between items-center">
+            <p className="text-xs text-blue-700">Uploading... {progress}%</p>
+            <button 
+              onClick={handleCancel}
+              className="text-xs text-red-600 hover:text-red-800 py-1 px-2 rounded"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
       
       {error && (
-        <div className="text-sm text-red-600 mt-1">
+        <div className="text-sm text-red-600 mt-1 bg-red-50 p-2 rounded">
           {error}
         </div>
       )}

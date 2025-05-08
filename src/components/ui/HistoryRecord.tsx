@@ -6,8 +6,8 @@ import FileUploader from "./FileUploader";
 interface HistoryRecordProps {
   record: IHistoryRecord;
   index: number;
-  clinicId?: string; // Added clinicId prop
-  patientId?: string; // Added patientId prop
+  clinicId: string;
+  patientId: string;
   onRemove: (index: number) => void;
   onUpdateDate: (index: number, newDate: Date) => void;
   onAddDocument: (index: number, url: string) => void;
@@ -31,7 +31,7 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
       : new Date(record.timestamp).toISOString().split("T")[0]
   );
   const [isAddingDocument, setIsAddingDocument] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null); // Added missing state
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Format the date nicely
   const formatDate = (dateString: string | Date): string => {
@@ -52,10 +52,14 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
     setIsEditingDate(false);
   };
 
-  // Handle document upload completion
-  const handleDocumentUpload = (url: string) => {
+  const handleUploadComplete = (url: string) => {
     onAddDocument(index, url);
     setIsAddingDocument(false);
+    setUploadError(null);
+  };
+
+  const handleUploadError = (error: string) => {
+    setUploadError(error);
   };
 
   // Extract filename from URL
@@ -148,9 +152,6 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
                   >
                     View
                   </button>
-                  <button className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded">
-                    Replace
-                  </button>
                   <button
                     className="text-xs bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded"
                     onClick={() => onRemoveDocument(index, docIndex)}
@@ -171,21 +172,18 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
       {/* Add Document section */}
       {isAddingDocument ? (
         <div className="mt-3 p-3 bg-white rounded border border-blue-100">
-          {clinicId ? (
-            <FileUploader
-              clinicId={clinicId}
-              patientId={patientId}
-              onUploadComplete={handleDocumentUpload}
-              onUploadError={(error) => setUploadError(error)}
-            />
-          ) : (
-            <div className="text-sm text-red-500 p-2">
-              Cannot upload documents: Clinic ID is required
-            </div>
-          )}
+          <FileUploader
+            clinicId={clinicId}
+            patientId={patientId}
+            onUploadComplete={handleUploadComplete}
+            onUploadError={handleUploadError}
+            onCancel={() => setIsAddingDocument(false)}
+          />
           
           {uploadError && (
-            <div className="text-sm text-red-500 mt-2">{uploadError}</div>
+            <div className="text-xs text-red-600 mt-2">
+              {uploadError}
+            </div>
           )}
           
           <div className="flex justify-end gap-2 mt-2">
