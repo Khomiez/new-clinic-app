@@ -1,4 +1,4 @@
-// src/redux/features/patients/patientsSlice.ts
+// src/redux/features/patients/patientsSlice.ts - Enhanced with force delete
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { IPatient } from '@/interfaces';
 import { toIdString } from '@/utils/mongoHelpers';
@@ -166,22 +166,31 @@ export const updatePatient = createAsyncThunk(
   }
 );
 
-// Delete a patient
+// Delete a patient with force delete option
 export const deletePatient = createAsyncThunk(
   'patients/deletePatient',
   async ({ 
     clinicId, 
-    patientId 
+    patientId,
+    forceDelete = false 
   }: { 
     clinicId: string, 
-    patientId: string 
+    patientId: string,
+    forceDelete?: boolean 
   }, { rejectWithValue }) => {
     try {
       if (!clinicId || !patientId) {
         throw new Error('Clinic ID and Patient ID are required');
       }
       
-      const response = await fetch(`/api/patient?clinicId=${clinicId}&id=${patientId}`, {
+      const url = new URL('/api/patient', window.location.origin);
+      url.searchParams.append('clinicId', clinicId);
+      url.searchParams.append('id', patientId);
+      if (forceDelete) {
+        url.searchParams.append('forceDelete', 'true');
+      }
+      
+      const response = await fetch(url.toString(), {
         method: 'DELETE',
       });
       
@@ -196,7 +205,10 @@ export const deletePatient = createAsyncThunk(
         return rejectWithValue(data.error || 'Failed to delete patient');
       }
       
-      return patientId; // Return the deleted patient ID for state updates
+      return { 
+        patientId, 
+        filesDeleted: data.filesDeleted || 0 
+      };
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to delete patient');
     }
@@ -294,7 +306,7 @@ const patientsSlice = createSlice({
         state.loading = 'succeeded';
         // Remove the deleted patient from items array
         state.items = state.items.filter(
-          patient => patient._id.toString() !== action.payload
+          patient => patient._id.toString() !== action.payload.patientId
         );
         state.error = null;
       })

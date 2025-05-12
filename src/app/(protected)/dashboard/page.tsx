@@ -1,4 +1,4 @@
-// src/app/(protected)/dashboard/page.tsx
+// src/app/(protected)/dashboard/page.tsx - Enhanced with better delete handling
 "use client";
 
 import { useState, useEffect } from "react";
@@ -10,6 +10,7 @@ import {
   ErrorScreen,
   Card,
 } from "@/components";
+import { PatientDeleteDialog } from "@/components/PatientDeleteDialog";
 import { IClinic, IPatient } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
@@ -40,12 +41,16 @@ export default function AdminDashboard() {
   );
   const dispatch = useAppDispatch();
 
-  // Local state for selected clinic - RENAMED the setter to avoid conflict
+  // Local state for selected clinic
   const [selectedClinic, setSelectedClinicState] = useState<
     IClinic | undefined
   >(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [filteredPatients, setFilteredPatients] = useState<IPatient[]>([]);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    patient: IPatient | null;
+  }>({ isOpen: false, patient: null });
 
   // Auth context
   const { isAuthenticated, logout, loading } = useAuth();
@@ -88,7 +93,6 @@ export default function AdminDashboard() {
       if (!selectedClinic) {
         setSelectedClinicState(clinicsState.items[0]);
         const firstClinicId = toIdString(clinicsState.items[0]._id);
-        // Store the clinic ID in Redux
         dispatch(setSelectedClinic(firstClinicId));
         dispatch(fetchPatients(firstClinicId));
       }
@@ -139,19 +143,28 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeletePatient = (patientId: string): void => {
-    if (!selectedClinic) {
-      alert("No clinic selected");
+  const handleDeletePatient = (patient: IPatient): void => {
+    setDeleteDialog({ isOpen: true, patient });
+  };
+
+  const confirmDeletePatient = async (forceDelete: boolean): Promise<void> => {
+    if (!deleteDialog.patient || !selectedClinic) {
       return;
     }
 
-    if (confirm("Are you sure you want to delete this patient?")) {
-      dispatch(
+    try {
+      await dispatch(
         deletePatient({
           clinicId: toIdString(selectedClinic._id),
-          patientId,
+          patientId: toIdString(deleteDialog.patient._id),
+          forceDelete, // This would need to be added to the Redux action
         })
-      );
+      ).unwrap();
+
+      setDeleteDialog({ isOpen: false, patient: null });
+    } catch (error: any) {
+      // Error is thrown back to the dialog component
+      throw error;
     }
   };
 
@@ -165,8 +178,7 @@ export default function AdminDashboard() {
       (c) => toIdString(c._id) === clinicId
     );
     if (clinic) {
-      setSelectedClinicState(clinic); // RENAMED from setSelectedClinic
-      // Store the selected clinic ID in Redux
+      setSelectedClinicState(clinic);
       dispatch(setSelectedClinic(clinicId));
       dispatch(fetchPatients(clinicId));
     }
@@ -195,6 +207,16 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
+      {/* Delete Dialog */}
+      {deleteDialog.patient && (
+        <PatientDeleteDialog
+          patient={deleteDialog.patient}
+          isOpen={deleteDialog.isOpen}
+          onConfirm={confirmDeletePatient}
+          onCancel={() => setDeleteDialog({ isOpen: false, patient: null })}
+        />
+      )}
+
       {/* Top Navigation */}
       <Navbar
         clinicName={selectedClinic?.name}
@@ -350,9 +372,7 @@ export default function AdminDashboard() {
                           ✏️
                         </button>
                         <button
-                          onClick={() =>
-                            handleDeletePatient(toIdString(patient._id))
-                          }
+                          onClick={() => handleDeletePatient(patient)}
                           className="text-red-500 hover:text-red-700"
                           aria-label="Delete patient"
                         >

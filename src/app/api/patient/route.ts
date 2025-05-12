@@ -202,6 +202,7 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const clinicId = searchParams.get("clinicId");
     const patientId = searchParams.get("id");
+    const forceDelete = searchParams.get("forceDelete") === "true";
 
     if (!clinicId || !patientId) {
       return NextResponse.json(
@@ -222,17 +223,104 @@ export async function DELETE(request: NextRequest) {
 
     const Patient = getPatientModel(clinicId);
 
-    const result = await Patient.findByIdAndDelete(patientId);
+    // First, get the patient to collect all document URLs
+    const patient = await Patient.findById(patientId);
 
-    if (!result) {
+    if (!patient) {
       return NextResponse.json(
         { success: false, error: "Patient not found" },
         { status: 404 }
       );
     }
 
+    // Collect all document URLs from medical history
+    const documentUrls: string[] = [];
+    if (patient.history) {
+      patient.history.forEach((record: any) => {
+        if (record.document_urls && Array.isArray(record.document_urls)) {
+          documentUrls.push(...record.document_urls);
+        }
+      });
+    }
+
+    // Delete patient from database
+    const result = await Patient.findByIdAndDelete(patientId);
+
+    // If database deletion successful, clean up files
+    if (documentUrls.length > 0) {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/upload/batch-delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: documentUrls })
+        });
+
+        const cleanupResult = await response.json();
+        
+        if (!cleanupResult.success) {
+          console.warn('Some files could not be deleted from storage:', cleanupResult);
+          
+          // If not forced delete and file cleanup failed, restore patient
+          if (!forceDelete) {
+            try {
+              await Patient.create(patient);
+              return NextResponse.json(
+                { 
+                  success: false, 
+                  error: "Failed to delete associated files. Patient not deleted.", 
+                  filesNotDeleted: documentUrls.length 
+                },
+                { status: 500 }
+              );
+            } catch (restoreError) {
+              console.error('Failed to restore patient after failed file cleanup:', restoreError);
+              return NextResponse.json(
+                { 
+                  success: false, 
+                  error: "Critical error: Patient deleted but files remain and restoration failed", 
+                  filesNotDeleted: documentUrls.length 
+                },
+                { status: 500 }
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error during file cleanup:', error);
+        
+        // If not forced and file cleanup threw error, restore patient
+        if (!forceDelete) {
+          try {
+            await Patient.create(patient);
+            return NextResponse.json(
+              { 
+                success: false, 
+                error: "File cleanup failed. Patient not deleted.", 
+                filesCount: documentUrls.length 
+              },
+              { status: 500 }
+            );
+          } catch (restoreError) {
+            console.error('Failed to restore patient after error:', restoreError);
+            return NextResponse.json(
+              { 
+                success: false, 
+                error: "Critical error: Patient deleted but file cleanup failed and restoration failed", 
+                filesCount: documentUrls.length 
+              },
+              { status: 500 }
+            );
+          }
+        }
+      }
+    }
+
     return NextResponse.json(
-      { success: true, message: "Patient deleted successfully" }
+      { 
+        success: true, 
+        message: "Patient deleted successfully",
+        filesDeleted: documentUrls.length
+      }
     );
   } catch (error) {
     console.error("DELETE patient error:", error);

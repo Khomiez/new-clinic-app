@@ -1,10 +1,10 @@
-// src/components/ui/MedicalHistorySection.tsx
-import React, { useState } from "react";
+// src/components/ui/MedicalHistorySection.tsx - Enhanced with transaction support
+import React, { useState, useEffect } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import HistoryRecord from "./HistoryRecord";
 import DocumentUpload from "./DocumentUpload";
 import { toIdString } from "@/utils/mongoHelpers";
-import { Types } from "mongoose";
+import { useDocumentManager } from "@/hooks/useDocumentManager";
 
 interface MedicalHistorySectionProps {
   patientId: string;
@@ -16,6 +16,8 @@ interface MedicalHistorySectionProps {
   onUpdateRecordDate: (index: number, newDate: Date) => void;
   onAddDocument: (recordIndex: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
+  onSavePatient?: () => Promise<void>; // For committing changes
+  onCancelEdit?: () => Promise<void>; // For rolling back changes
 }
 
 const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
@@ -28,6 +30,8 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   onUpdateRecordDate,
   onAddDocument,
   onRemoveDocument,
+  onSavePatient,
+  onCancelEdit,
 }) => {
   const [isAddingRecord, setIsAddingRecord] = useState<boolean>(false);
   const [currentRecord, setCurrentRecord] = useState<IHistoryRecord>({
@@ -36,6 +40,34 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     notes: "",
   });
   const [isAddingDocument, setIsAddingDocument] = useState<boolean>(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState<{
+    show: boolean;
+    recordIndex?: number;
+    title?: string;
+    message?: string;
+    onConfirm?: () => void;
+  }>({ show: false });
+
+  // Use our document manager hook
+  const documentManager = useDocumentManager({
+    onAddDocument,
+    onRemoveDocument,
+    clinicId: clinicId || '',
+  });
+
+  // Handle page unload/refresh to clean up pending operations
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (documentManager.pendingOperations.length > 0) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [documentManager.pendingOperations]);
 
   const handleRecordChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -56,6 +88,8 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   };
 
   const handleAddDocument = (url: string) => {
+    // When adding a document to a new record (not yet in the history),
+    // we'll store it locally in the current record
     setCurrentRecord((prev) => ({
       ...prev,
       document_urls: [...(prev.document_urls || []), url],
@@ -70,31 +104,123 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     }));
   };
 
-  const handleSaveRecord = () => {
+  const handleSaveRecord = async () => {
     if (!currentRecord.timestamp) {
       alert("Date and time are required for the history record");
       return;
     }
 
-    onAddRecord(currentRecord);
-    
-    // Reset form
-    setCurrentRecord({
-      timestamp: new Date(),
-      document_urls: [],
-      notes: "",
+    try {
+      onAddRecord(currentRecord);
+      
+      // Commit all pending document operations
+      documentManager.commitPendingOperations();
+      
+      // Reset form
+      setCurrentRecord({
+        timestamp: new Date(),
+        document_urls: [],
+        notes: "",
+      });
+      setIsAddingRecord(false);
+      setIsAddingDocument(false);
+    } catch (error) {
+      console.error('Error saving record:', error);
+      alert('Failed to save record. Please try again.');
+    }
+  };
+
+  const handleCancelRecord = async () => {
+    setShowDeleteConfirmation({
+      show: true,
+      title: "Cancel Record",
+      message: "Are you sure you want to cancel? Any uploaded documents will be deleted.",
+      onConfirm: async () => {
+        // Rollback any pending document operations
+        await documentManager.rollbackPendingOperations();
+        
+        // Reset form
+        setCurrentRecord({
+          timestamp: new Date(),
+          document_urls: [],
+          notes: "",
+        });
+        setIsAddingRecord(false);
+        setIsAddingDocument(false);
+        setShowDeleteConfirmation({ show: false });
+      }
     });
-    setIsAddingRecord(false);
-    setIsAddingDocument(false);
+  };
+
+  const handleRemoveRecord = (index: number) => {
+    const record = historyRecords[index];
+    const documentCount = record.document_urls?.length || 0;
+    
+    setShowDeleteConfirmation({
+      show: true,
+      recordIndex: index,
+      title: "Delete Medical Record",
+      message: `Are you sure you want to delete this record?${
+        documentCount > 0 
+          ? ` This will also permanently delete ${documentCount} attached document${documentCount > 1 ? 's' : ''}.`
+          : ''
+      }`,
+      onConfirm: async () => {
+        try {
+          // Get the document URLs from the record
+          const documentUrls = record.document_urls || [];
+          
+          if (documentUrls.length > 0) {
+            // Clean up files first
+            const cleanupResult = await documentManager.cleanupOrphanedFiles(documentUrls);
+            
+            if (!cleanupResult.success) {
+              if (!confirm(`Some files could not be deleted from storage. Continue anyway?`)) {
+                setShowDeleteConfirmation({ show: false });
+                return;
+              }
+            }
+          }
+          
+          // Remove from local state
+          onRemoveRecord(index);
+          setShowDeleteConfirmation({ show: false });
+        } catch (error) {
+          console.error('Error removing record:', error);
+          alert('Failed to delete record. Please try again.');
+          setShowDeleteConfirmation({ show: false });
+        }
+      }
+    });
+  };
+
+  // Enhanced save/cancel handling for parent component
+  const handleParentSave = async () => {
+    if (onSavePatient) {
+      await onSavePatient();
+      documentManager.commitPendingOperations();
+    }
+  };
+
+  const handleParentCancel = async () => {
+    if (documentManager.pendingOperations.length > 0) {
+      if (confirm('You have unsaved changes. Discard them?')) {
+        await documentManager.rollbackPendingOperations();
+        if (onCancelEdit) {
+          await onCancelEdit();
+        }
+      }
+    } else if (onCancelEdit) {
+      await onCancelEdit();
+    }
   };
 
   const formatDateTimeForInput = (date: Date | string): string => {
     if (!date) return "";
     const dateObj = date instanceof Date ? date : new Date(date);
-    return dateObj.toISOString().slice(0, 16); // Format for datetime-local input
+    return dateObj.toISOString().slice(0, 16);
   };
 
-  // Helper function to get icon for document type
   const getFileIcon = (url: string): string => {
     const lowerUrl = url.toLowerCase();
     if (lowerUrl.endsWith(".pdf")) return "📕";
@@ -102,14 +228,48 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     if (lowerUrl.match(/\.(doc|docx)$/)) return "📝";
     if (lowerUrl.match(/\.(xls|xlsx|csv)$/)) return "📊";
     if (lowerUrl.match(/\.(ppt|pptx)$/)) return "📊";
-    return "📄"; // Default document icon
+    return "📄";
   };
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirmation.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-xl font-bold text-red-600 mb-4">
+              {showDeleteConfirmation.title}
+            </h3>
+            <p className="text-gray-700 mb-6">
+              {showDeleteConfirmation.message}
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirmation({ show: false })}
+                className="flex-1 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={showDeleteConfirmation.onConfirm}
+                className="flex-1 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+                disabled={documentManager.isProcessing}
+              >
+                {documentManager.isProcessing ? 'Processing...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl text-blue-700 font-medium flex items-center gap-2">
           <span>📁</span> Medical History
+          {documentManager.pendingOperations.length > 0 && (
+            <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">
+              {documentManager.pendingOperations.length} unsaved changes
+            </span>
+          )}
         </h2>
         <button
           onClick={() => setIsAddingRecord(true)}
@@ -195,7 +355,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
               </div>
             )}
 
-            {/* Document upload with our existing DocumentUpload component */}
+            {/* Document upload */}
             <div>
               <label className="block text-sm font-medium text-blue-700 mb-2">
                 Add Documents
@@ -232,16 +392,9 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
             <div className="flex justify-end space-x-3 pt-3">
               <button
                 type="button"
-                onClick={() => {
-                  setIsAddingRecord(false);
-                  setIsAddingDocument(false);
-                  setCurrentRecord({
-                    timestamp: new Date(),
-                    document_urls: [],
-                    notes: "",
-                  });
-                }}
+                onClick={handleCancelRecord}
                 className="px-4 py-2 border border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 transition"
+                disabled={documentManager.isProcessing}
               >
                 Cancel
               </button>
@@ -249,8 +402,9 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 type="button"
                 onClick={handleSaveRecord}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                disabled={documentManager.isProcessing}
               >
-                Save Record
+                {documentManager.isProcessing ? 'Processing...' : 'Save Record'}
               </button>
             </div>
           </div>
@@ -267,7 +421,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
               index={index}
               clinicId={clinicId}
               patientId={patientId}
-              onRemove={onRemoveRecord}
+              onRemove={() => handleRemoveRecord(index)}
               onUpdateDate={onUpdateRecordDate}
               onAddDocument={onAddDocument}
               onRemoveDocument={onRemoveDocument}
@@ -287,6 +441,35 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
           </div>
         )}
       </div>
+
+      {/* Global action buttons for save/cancel */}
+      {(documentManager.pendingOperations.length > 0 || onSavePatient || onCancelEdit) && (
+        <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+          <p className="text-orange-700 text-sm mb-3">
+            You have unsaved changes. Don't forget to save your work!
+          </p>
+          <div className="flex space-x-3">
+            {onCancelEdit && (
+              <button
+                onClick={handleParentCancel}
+                className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition"
+                disabled={documentManager.isProcessing}
+              >
+                Discard Changes
+              </button>
+            )}
+            {onSavePatient && (
+              <button
+                onClick={handleParentSave}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                disabled={documentManager.isProcessing}
+              >
+                {documentManager.isProcessing ? 'Saving...' : 'Save All Changes'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
