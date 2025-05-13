@@ -1,4 +1,4 @@
-// src/components/ui/MedicalHistorySection.tsx - Enhanced with transaction support
+// src/components/ui/MedicalHistorySection.tsx - Without save/cancel buttons
 import React, { useState, useEffect } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import HistoryRecord from "./HistoryRecord";
@@ -16,8 +16,6 @@ interface MedicalHistorySectionProps {
   onUpdateRecordDate: (index: number, newDate: Date) => void;
   onAddDocument: (recordIndex: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
-  onSavePatient?: () => Promise<void>; // For committing changes
-  onCancelEdit?: () => Promise<void>; // For rolling back changes
 }
 
 const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
@@ -30,8 +28,6 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   onUpdateRecordDate,
   onAddDocument,
   onRemoveDocument,
-  onSavePatient,
-  onCancelEdit,
 }) => {
   const [isAddingRecord, setIsAddingRecord] = useState<boolean>(false);
   const [currentRecord, setCurrentRecord] = useState<IHistoryRecord>({
@@ -88,8 +84,6 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   };
 
   const handleAddDocument = (url: string) => {
-    // When adding a document to a new record (not yet in the history),
-    // we'll store it locally in the current record
     setCurrentRecord((prev) => ({
       ...prev,
       document_urls: [...(prev.document_urls || []), url],
@@ -192,27 +186,6 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
         }
       }
     });
-  };
-
-  // Enhanced save/cancel handling for parent component
-  const handleParentSave = async () => {
-    if (onSavePatient) {
-      await onSavePatient();
-      documentManager.commitPendingOperations();
-    }
-  };
-
-  const handleParentCancel = async () => {
-    if (documentManager.pendingOperations.length > 0) {
-      if (confirm('You have unsaved changes. Discard them?')) {
-        await documentManager.rollbackPendingOperations();
-        if (onCancelEdit) {
-          await onCancelEdit();
-        }
-      }
-    } else if (onCancelEdit) {
-      await onCancelEdit();
-    }
   };
 
   const formatDateTimeForInput = (date: Date | string): string => {
@@ -404,7 +377,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
                 disabled={documentManager.isProcessing}
               >
-                {documentManager.isProcessing ? 'Processing...' : 'Save Record'}
+                {documentManager.isProcessing ? 'Processing...' : 'Add to History'}
               </button>
             </div>
           </div>
@@ -442,34 +415,13 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
         )}
       </div>
 
-      {/* Global action buttons for save/cancel */}
-      {(documentManager.pendingOperations.length > 0 || onSavePatient || onCancelEdit) && (
-        <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
-          <p className="text-orange-700 text-sm mb-3">
-            You have unsaved changes. Don't forget to save your work!
-          </p>
-          <div className="flex space-x-3">
-            {onCancelEdit && (
-              <button
-                onClick={handleParentCancel}
-                className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition"
-                disabled={documentManager.isProcessing}
-              >
-                Discard Changes
-              </button>
-            )}
-            {onSavePatient && (
-              <button
-                onClick={handleParentSave}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
-                disabled={documentManager.isProcessing}
-              >
-                {documentManager.isProcessing ? 'Saving...' : 'Save All Changes'}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Information Note */}
+      <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <p className="text-blue-700 text-sm">
+          <span className="font-bold">Note:</span> Changes to medical history will be saved 
+          when you click the "Save Changes" button at the top of the page.
+        </p>
+      </div>
     </div>
   );
 };

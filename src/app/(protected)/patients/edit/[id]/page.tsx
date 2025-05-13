@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - Final version
+// src/app/(protected)/patients/edit/[id]/page.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -8,7 +8,6 @@ import {
   Sidebar,
   LoadingScreen,
   ErrorScreen,
-  PatientForm,
   MedicalHistorySection,
 } from "@/components";
 import { IPatient, IClinic, IHistoryRecord } from "@/interfaces";
@@ -244,12 +243,6 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    handleSave();
   };
 
   // Rollback pending file operations
@@ -530,7 +523,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     return <LoadingScreen pageName="Edit Patient" />;
   }
 
-  // Show error if admin data or clinics failed to load
+  // Show error screens
   if (adminInfo.loading === "failed") {
     return (
       <ErrorScreen
@@ -620,7 +613,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
         />
 
         <div className="flex-grow p-8">
-          {/* Header */}
+          {/* Header with Main Save/Cancel Buttons */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-blue-800 flex items-center gap-2">
@@ -656,7 +649,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
             </div>
           </div>
 
-          {/* Main Content */}
+          {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Patient Information Card */}
             <div className="lg:col-span-1">
@@ -664,19 +657,96 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 <h2 className="text-xl text-blue-700 font-medium mb-4 flex items-center gap-2">
                   Patient Details 📋
                 </h2>
-                <PatientForm
-                  patient={patient}
-                  handleChange={handleChange}
-                  handleSubmit={handleSubmit}
-                  isSubmitting={isSaving}
-                  submitLabel="Update Patient"
-                  cancelAction={handleDiscard}
-                  isEditMode={true}
-                />
+                
+                {/* Modified Patient Form - No Save Button */}
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 gap-6">
+                    <div>
+                      <label
+                        className="block text-sm font-medium text-slate-600 mb-1"
+                        htmlFor="name"
+                      >
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        value={patient.name || ""}
+                        onChange={handleChange}
+                        placeholder="Enter patient's full name"
+                        required
+                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        className="block text-sm font-medium text-slate-600 mb-1"
+                        htmlFor="HN_code"
+                      >
+                        Hospital Number (HN) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="HN_code"
+                        name="HN_code"
+                        value={patient.HN_code || ""}
+                        onChange={handleChange}
+                        disabled={true}
+                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-100 cursor-not-allowed"
+                      />
+                      <p className="text-xs text-blue-500 mt-1">
+                        HN code cannot be changed after creation
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-slate-600 mb-1"
+                      htmlFor="ID_code"
+                    >
+                      ID Number
+                    </label>
+                    <input
+                      type="text"
+                      id="ID_code"
+                      name="ID_code"
+                      value={patient.ID_code || ""}
+                      onChange={handleChange}
+                      placeholder="Enter ID number (optional)"
+                      className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label
+                      className="block text-sm font-medium text-slate-600 mb-1"
+                      htmlFor="lastVisit"
+                    >
+                      Last Visit Date
+                    </label>
+                    <input
+                      type="date"
+                      id="lastVisit"
+                      name="lastVisit"
+                      value={formatDateForInput(patient.lastVisit)}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
+                    />
+                  </div>
+                  
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <p className="text-sm text-blue-600">
+                      <span className="font-bold">Note:</span> Use the "Save Changes" button above to save all patient information and medical history.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Enhanced Medical History Section */}
+            {/* Medical History Section - No Save/Cancel Props */}
             <div className="lg:col-span-2">
               <MedicalHistorySection
                 patientId={patientId}
@@ -690,8 +760,9 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 onUpdateRecordDate={handleUpdateRecordDate}
                 onAddDocument={handleAddDocument}
                 onRemoveDocument={handleRemoveDocument}
-                onSavePatient={handleSave}
-                onCancelEdit={handleDiscard}
+                // Remove these props to prevent duplicate buttons
+                // onSavePatient={handleSave}
+                // onCancelEdit={handleDiscard}
               />
             </div>
           </div>
