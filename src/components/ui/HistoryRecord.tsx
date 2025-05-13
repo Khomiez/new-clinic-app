@@ -1,8 +1,9 @@
-// src/components/ui/EnhancedHistoryRecord.tsx
+// src/components/ui/HistoryRecord.tsx - Enhanced with deferred deletion
 import React, { useState } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import DocumentUpload from "./DocumentUpload";
 import { toIdString } from "@/utils/mongoHelpers";
+import { DocumentOperation } from "@/hooks/useDocumentManager";
 
 interface EnhancedHistoryRecordProps {
   record: IHistoryRecord;
@@ -13,6 +14,8 @@ interface EnhancedHistoryRecordProps {
   onUpdateDate: (index: number, newDate: Date) => void;
   onAddDocument: (index: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
+  // New props for tracking pending operations
+  pendingOperations?: DocumentOperation[];
 }
 
 const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
@@ -24,6 +27,7 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
   onUpdateDate,
   onAddDocument,
   onRemoveDocument,
+  pendingOperations = []
 }) => {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -35,7 +39,6 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
   const [notesValue, setNotesValue] = useState(record.notes || "");
   const [isAddingDocument, setIsAddingDocument] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isDeletingDoc, setIsDeletingDoc] = useState<number | null>(null);
 
   // Format the date nicely
   const formatDate = (dateString: string | Date): string => {
@@ -89,41 +92,37 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
     setIsAddingDocument(false);
   };
 
+  // Check if a document is pending removal
+  const isDocumentPendingRemoval = (url: string, docIndex: number) => {
+    return pendingOperations.some(
+      op => op.type === 'remove' && 
+           op.url === url && 
+           op.recordIndex === index && 
+           op.documentIndex === docIndex
+    );
+  };
+
+  // Check if a document was just added and is pending
+  const isDocumentPendingAdd = (url: string) => {
+    return pendingOperations.some(
+      op => op.type === 'add' && 
+           op.url === url && 
+           op.recordIndex === index
+    );
+  };
+
   const handleRemoveDocumentClick = async (url: string, docIndex: number) => {
-    if (confirm("Are you sure you want to delete this document?")) {
+    if (confirm("Are you sure you want to delete this document? It will be permanently removed when you save.")) {
       try {
         if (!clinicId) {
           throw new Error("Clinic ID is required to delete documents");
         }
 
-        setIsDeletingDoc(docIndex);
-
-        // Use the correct endpoint with proper URL encoding
-        const response = await fetch(
-          `/api/clinic/${clinicId}/files?url=${encodeURIComponent(url)}`,
-          {
-            method: "DELETE",
-          }
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Server returned an error");
-        }
-
-        const data = await response.json();
-
-        if (!data.success) {
-          throw new Error(data.error || "Failed to delete from storage");
-        }
-
-        // If Cloudinary deletion was successful, remove from UI/database
+        // Just remove from UI - actual Cloudinary deletion will happen on save
         onRemoveDocument(index, docIndex);
       } catch (error: any) {
-        console.error("Error deleting document:", error);
-        alert(`Failed to delete document: ${error.message}. Please try again.`);
-      } finally {
-        setIsDeletingDoc(null);
+        console.error("Error removing document:", error);
+        alert(`Failed to remove document: ${error.message}. Please try again.`);
       }
     }
   };
@@ -297,61 +296,78 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
         {/* Documents List */}
         {record.document_urls && record.document_urls.length > 0 ? (
           <div className="space-y-2">
-            {record.document_urls.map((url, docIndex) => (
-              <div key={docIndex} className="relative">
-                <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xl">{getFileIcon(url)}</span>
-                    <span className="text-gray-700 truncate max-w-md">
-                      {getFilenameFromUrl(url)}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    {isImageFile(url) && (
-                      <button
-                        onClick={() => togglePreview(url)}
-                        className="text-sm bg-green-100 text-green-600 px-2 py-1 rounded hover:bg-green-200"
-                        disabled={isDeletingDoc === docIndex}
+            {record.document_urls.map((url, docIndex) => {
+              const isPendingRemoval = isDocumentPendingRemoval(url, docIndex);
+              const isPendingAdd = isDocumentPendingAdd(url);
+              
+              return (
+                <div key={docIndex} className="relative">
+                  <div className={`flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors ${
+                    isPendingRemoval ? 'opacity-50 bg-red-50 border-red-200' : ''
+                  } ${isPendingAdd ? 'bg-green-50 border-green-200' : ''}`}>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xl">{getFileIcon(url)}</span>
+                      <span className="text-gray-700 truncate max-w-md">
+                        {getFilenameFromUrl(url)}
+                      </span>
+                      {isPendingRemoval && (
+                        <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                          Will be deleted on save
+                        </span>
+                      )}
+                      {isPendingAdd && (
+                        <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded">
+                          New - not saved yet
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      {isImageFile(url) && (
+                        <button
+                          onClick={() => togglePreview(url)}
+                          className="text-sm bg-green-100 text-green-600 px-2 py-1 rounded hover:bg-green-200"
+                          disabled={isPendingRemoval}
+                        >
+                          {previewUrl === url ? "Hide" : "View"}
+                        </button>
+                      )}
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200"
                       >
-                        {previewUrl === url ? "Hide" : "View"}
+                        Open
+                      </a>
+                      <button
+                        onClick={() => handleRemoveDocumentClick(url, docIndex)}
+                        className="text-sm bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 ml-1"
+                        disabled={isPendingRemoval}
+                      >
+                        {isPendingRemoval ? "Marked for deletion" : "Delete"}
                       </button>
-                    )}
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200"
-                    >
-                      Open
-                    </a>
-                    <button
-                      onClick={() => handleRemoveDocumentClick(url, docIndex)}
-                      className="text-sm bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 ml-1"
-                      disabled={isDeletingDoc === docIndex}
-                    >
-                      {isDeletingDoc === docIndex ? "Deleting..." : "Delete"}
-                    </button>
+                    </div>
                   </div>
-                </div>
 
-                {/* Image Preview */}
-                {previewUrl === url && isImageFile(url) && (
-                  <div className="mt-2 p-2 bg-gray-100 rounded-lg">
-                    <img
-                      src={url}
-                      alt="Document preview"
-                      className="max-w-full max-h-64 object-contain mx-auto border border-gray-300 rounded"
-                    />
-                    <button
-                      onClick={() => setPreviewUrl(null)}
-                      className="mt-2 mx-auto block text-sm bg-gray-200 text-gray-600 px-2 py-1 rounded hover:bg-gray-300"
-                    >
-                      Close Preview
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+                  {/* Image Preview */}
+                  {previewUrl === url && isImageFile(url) && !isPendingRemoval && (
+                    <div className="mt-2 p-2 bg-gray-100 rounded-lg">
+                      <img
+                        src={url}
+                        alt="Document preview"
+                        className="max-w-full max-h-64 object-contain mx-auto border border-gray-300 rounded"
+                      />
+                      <button
+                        onClick={() => setPreviewUrl(null)}
+                        className="mt-2 mx-auto block text-sm bg-gray-200 text-gray-600 px-2 py-1 rounded hover:bg-gray-300"
+                      >
+                        Close Preview
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="bg-blue-50 p-3 rounded-lg text-center">
