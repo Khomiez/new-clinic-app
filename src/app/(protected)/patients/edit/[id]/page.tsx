@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - Complete updated version with deferred operations
+// src/app/(protected)/patients/edit/[id]/page.tsx - Updated to use single documentManager
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -412,7 +412,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
           
           // Add to pending operations for cleanup on save
           for (let i = 0; i < urlsToDelete.length; i++) {
-            documentManager.removeDocumentWithDeferred(index, i, urlsToDelete[i]);
+            await documentManager.removeDocumentWithDeferred(index, i, urlsToDelete[i]);
           }
         }
 
@@ -455,19 +455,19 @@ export default function EditPatient({ params }: { params: { id: string } }) {
   };
 
   // Document handlers - using document manager with deferred operations
-  const handleAddDocument = (recordIndex: number, url: string) => {
+  const handleAddDocument = async (recordIndex: number, url: string) => {
     // Use document manager to track this addition
-    documentManager.addDocumentWithRollback(recordIndex, url, false);
+    await documentManager.addDocumentWithRollback(recordIndex, url, false);
   };
 
-  const handleRemoveDocument = (recordIndex: number, documentIndex: number) => {
+  const handleRemoveDocument = async (recordIndex: number, documentIndex: number) => {
     // Get the URL before removing for tracking
     const record = patient.history?.[recordIndex];
     const url = record?.document_urls?.[documentIndex];
     
     if (url) {
       // Use document manager with deferred deletion
-      documentManager.removeDocumentWithDeferred(recordIndex, documentIndex, url);
+      await documentManager.removeDocumentWithDeferred(recordIndex, documentIndex, url);
     }
   };
 
@@ -746,7 +746,14 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 onUpdateRecordDate={handleUpdateRecordDate}
                 onAddDocument={handleAddDocument}
                 onRemoveDocument={handleRemoveDocument}
+                // Pass documentManager props
                 pendingOperations={documentManager.pendingOperations}
+                isProcessing={documentManager.isProcessing}
+                addDocumentWithRollback={documentManager.addDocumentWithRollback}
+                removeDocumentWithDeferred={documentManager.removeDocumentWithDeferred}
+                rollbackPendingOperations={documentManager.rollbackPendingOperations}
+                commitPendingOperations={documentManager.commitPendingOperations}
+                cleanupOrphanedFiles={documentManager.cleanupOrphanedFiles}
               />
             </div>
           </div>

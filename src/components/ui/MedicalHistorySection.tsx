@@ -1,10 +1,10 @@
-// src/components/ui/MedicalHistorySection.tsx - Without save/cancel buttons
+// src/components/ui/MedicalHistorySection.tsx - Without save/cancel buttons, using passed documentManager
 import React, { useState, useEffect } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import HistoryRecord from "./HistoryRecord";
 import DocumentUpload from "./DocumentUpload";
 import { toIdString } from "@/utils/mongoHelpers";
-import { useDocumentManager } from "@/hooks/useDocumentManager";
+import { DocumentOperation } from "@/hooks/useDocumentManager";
 
 interface MedicalHistorySectionProps {
   patientId: string;
@@ -16,6 +16,14 @@ interface MedicalHistorySectionProps {
   onUpdateRecordDate: (index: number, newDate: Date) => void;
   onAddDocument: (recordIndex: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
+  // New props from parent's documentManager
+  pendingOperations: DocumentOperation[];
+  isProcessing: boolean;
+  addDocumentWithRollback: (recordIndex: number, url: string, shouldCommit?: boolean) => Promise<DocumentOperation>;
+  removeDocumentWithDeferred: (recordIndex: number, documentIndex: number, url: string) => Promise<DocumentOperation>;
+  rollbackPendingOperations: () => Promise<void>;
+  commitPendingOperations: () => Promise<void>;
+  cleanupOrphanedFiles: (urls: string[]) => Promise<{ success: boolean; errors?: any[] }>;
 }
 
 const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
@@ -28,6 +36,13 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   onUpdateRecordDate,
   onAddDocument,
   onRemoveDocument,
+  pendingOperations,
+  isProcessing,
+  addDocumentWithRollback,
+  removeDocumentWithDeferred,
+  rollbackPendingOperations,
+  commitPendingOperations,
+  cleanupOrphanedFiles,
 }) => {
   const [isAddingRecord, setIsAddingRecord] = useState<boolean>(false);
   const [currentRecord, setCurrentRecord] = useState<IHistoryRecord>({
@@ -44,17 +59,10 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     onConfirm?: () => void;
   }>({ show: false });
 
-  // Use our document manager hook
-  const documentManager = useDocumentManager({
-    onAddDocument,
-    onRemoveDocument,
-    clinicId: clinicId || '',
-  });
-
   // Handle page unload/refresh to clean up pending operations
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (documentManager.pendingOperations.length > 0) {
+      if (pendingOperations.length > 0) {
         e.preventDefault();
         e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
         return e.returnValue;
@@ -63,7 +71,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [documentManager.pendingOperations]);
+  }, [pendingOperations]);
 
   const handleRecordChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -108,7 +116,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       onAddRecord(currentRecord);
       
       // Commit all pending document operations
-      documentManager.commitPendingOperations();
+      await commitPendingOperations();
       
       // Reset form
       setCurrentRecord({
@@ -131,7 +139,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       message: "Are you sure you want to cancel? Any uploaded documents will be deleted.",
       onConfirm: async () => {
         // Rollback any pending document operations
-        await documentManager.rollbackPendingOperations();
+        await rollbackPendingOperations();
         
         // Reset form
         setCurrentRecord({
@@ -166,7 +174,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
           
           if (documentUrls.length > 0) {
             // Clean up files first
-            const cleanupResult = await documentManager.cleanupOrphanedFiles(documentUrls);
+            const cleanupResult = await cleanupOrphanedFiles(documentUrls);
             
             if (!cleanupResult.success) {
               if (!confirm(`Some files could not be deleted from storage. Continue anyway?`)) {
@@ -226,9 +234,9 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
               <button
                 onClick={showDeleteConfirmation.onConfirm}
                 className="flex-1 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-                disabled={documentManager.isProcessing}
+                disabled={isProcessing}
               >
-                {documentManager.isProcessing ? 'Processing...' : 'Delete'}
+                {isProcessing ? 'Processing...' : 'Delete'}
               </button>
             </div>
           </div>
@@ -238,9 +246,9 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl text-blue-700 font-medium flex items-center gap-2">
           <span>📁</span> Medical History
-          {documentManager.pendingOperations.length > 0 && (
+          {pendingOperations.length > 0 && (
             <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">
-              {documentManager.pendingOperations.length} unsaved changes
+              {pendingOperations.length} unsaved changes
             </span>
           )}
         </h2>
@@ -367,7 +375,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 type="button"
                 onClick={handleCancelRecord}
                 className="px-4 py-2 border border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 transition"
-                disabled={documentManager.isProcessing}
+                disabled={isProcessing}
               >
                 Cancel
               </button>
@@ -375,9 +383,9 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 type="button"
                 onClick={handleSaveRecord}
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
-                disabled={documentManager.isProcessing}
+                disabled={isProcessing}
               >
-                {documentManager.isProcessing ? 'Processing...' : 'Add to History'}
+                {isProcessing ? 'Processing...' : 'Add to History'}
               </button>
             </div>
           </div>
@@ -398,6 +406,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
               onUpdateDate={onUpdateRecordDate}
               onAddDocument={onAddDocument}
               onRemoveDocument={onRemoveDocument}
+              pendingOperations={pendingOperations}
             />
           ))
         ) : (

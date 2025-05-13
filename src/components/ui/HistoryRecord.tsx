@@ -1,11 +1,11 @@
-// src/components/ui/HistoryRecord.tsx - Enhanced with deferred deletion
+// src/components/ui/HistoryRecord.tsx - Updated to receive pendingOperations
 import React, { useState } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import DocumentUpload from "./DocumentUpload";
 import { toIdString } from "@/utils/mongoHelpers";
 import { DocumentOperation } from "@/hooks/useDocumentManager";
 
-interface EnhancedHistoryRecordProps {
+interface HistoryRecordProps {
   record: IHistoryRecord;
   index: number;
   clinicId?: string;
@@ -14,11 +14,11 @@ interface EnhancedHistoryRecordProps {
   onUpdateDate: (index: number, newDate: Date) => void;
   onAddDocument: (index: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
-  // New props for tracking pending operations
-  pendingOperations?: DocumentOperation[];
+  // Pending operations from parent
+  pendingOperations: DocumentOperation[];
 }
 
-const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
+const HistoryRecord: React.FC<HistoryRecordProps> = ({
   record,
   index,
   clinicId,
@@ -27,7 +27,7 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
   onUpdateDate,
   onAddDocument,
   onRemoveDocument,
-  pendingOperations = []
+  pendingOperations
 }) => {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -72,9 +72,8 @@ const HistoryRecord: React.FC<EnhancedHistoryRecordProps> = ({
       notes: notesValue,
     };
 
-    // You'll need to add a new function in the parent component
-    // to handle updating notes specifically
-    // For now, let's assume we can use onUpdateDate as a workaround
+    // Note: For now we're using onUpdateDate as a workaround
+    // In a complete implementation, you'd want to add an onUpdateRecord function
     onUpdateDate(index, new Date(record.timestamp));
     setIsEditingNotes(false);
   };
