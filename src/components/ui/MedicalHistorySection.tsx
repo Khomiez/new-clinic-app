@@ -1,4 +1,4 @@
-// src/components/ui/MedicalHistorySection.tsx - With deferred record deletion and proper props
+// src/components/ui/MedicalHistorySection.tsx - Complete enhanced version with better rollback handling
 import React, { useState, useEffect } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import HistoryRecord from "./HistoryRecord";
@@ -29,7 +29,6 @@ interface MedicalHistorySectionProps {
   getPendingRecordOperations: () => DocumentOperation[];
   removePendingRecordDeletion: (recordIndex: number) => void;
 }
-
 
 const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   patientId,
@@ -100,7 +99,12 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     }
   };
 
-  const handleAddDocument = (url: string) => {
+  const handleAddDocument = async (url: string) => {
+    // Use the document manager to add the document with proper tracking
+    // We're adding to a new record (index -1 to indicate it's for currentRecord)
+    await addDocumentWithRollback(-1, url, false);
+    
+    // Update the current record's document URLs
     setCurrentRecord((prev) => ({
       ...prev,
       document_urls: [...(prev.document_urls || []), url],
@@ -108,7 +112,14 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     setIsAddingDocument(false);
   };
 
-  const handleRemoveDocumentFromCurrentRecord = (docIndex: number) => {
+  const handleRemoveDocumentFromCurrentRecord = async (docIndex: number) => {
+    const url = currentRecord.document_urls?.[docIndex];
+    if (!url) return;
+
+    // Use document manager for proper tracking
+    await removeDocumentWithDeferred(-1, docIndex, url);
+    
+    // Update the current record
     setCurrentRecord((prev) => ({
       ...prev,
       document_urls: prev.document_urls?.filter((_, i) => i !== docIndex) || [],
@@ -122,9 +133,10 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     }
 
     try {
+      // Add the record first
       onAddRecord(currentRecord);
       
-      // Commit all pending document operations
+      // Commit all pending document operations (this handles any files that need to stay)
       await commitPendingOperations();
       
       // Reset form
@@ -142,23 +154,36 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   };
 
   const handleCancelRecord = async () => {
+    // Count how many operations would be affected
+    const currentRecordOperations = pendingOperations.filter(
+      op => op.recordIndex === -1 || (op.recordIndex === -1 && op.url && currentRecord.document_urls?.includes(op.url))
+    );
+    
     setShowDeleteConfirmation({
       show: true,
       title: "Cancel Record",
-      message: "Are you sure you want to cancel? Any uploaded documents will be deleted.",
+      message: currentRecordOperations.length > 0 
+        ? `Are you sure you want to cancel? ${currentRecordOperations.length} pending file operation(s) will be reverted.`
+        : "Are you sure you want to cancel? This will discard the current record.",
       onConfirm: async () => {
-        // Rollback any pending document operations
-        await rollbackPendingOperations();
-        
-        // Reset form
-        setCurrentRecord({
-          timestamp: new Date(),
-          document_urls: [],
-          notes: "",
-        });
-        setIsAddingRecord(false);
-        setIsAddingDocument(false);
-        setShowDeleteConfirmation({ show: false });
+        try {
+          // Important: Rollback ALL pending operations for this session
+          // This will properly handle files that were added and then marked for deletion
+          await rollbackPendingOperations();
+          
+          // Reset form
+          setCurrentRecord({
+            timestamp: new Date(),
+            document_urls: [],
+            notes: "",
+          });
+          setIsAddingRecord(false);
+          setIsAddingDocument(false);
+          setShowDeleteConfirmation({ show: false });
+        } catch (error) {
+          console.error('Error during cancel:', error);
+          alert('There was an error canceling the record. Please try again.');
+        }
       }
     });
   };
@@ -239,6 +264,21 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
             <p className="text-gray-700 mb-6">
               {showDeleteConfirmation.message}
             </p>
+            {/* Show pending operations summary */}
+            {showDeleteConfirmation.title === "Cancel Record" && pendingOperations.length > 0 && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800 font-medium">Pending operations that will be reverted:</p>
+                <ul className="text-xs text-yellow-700 mt-1 ml-4 list-disc">
+                  {pendingOperations.map((op, idx) => (
+                    <li key={idx}>
+                      {op.type === 'add' && 'New file upload will be deleted'}
+                      {op.type === 'remove' && 'File removal will be cancelled'}
+                      {op.type === 'remove_record' && 'Record deletion will be cancelled'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex space-x-3">
               <button
                 onClick={() => setShowDeleteConfirmation({ show: false })}
@@ -326,27 +366,42 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                   Attached Documents
                 </label>
                 <div className="space-y-2 mb-3">
-                  {currentRecord.document_urls.map((url, idx) => (
-                    <div
-                      key={idx}
-                      className="flex justify-between items-center bg-white p-2 rounded border border-blue-100"
-                    >
-                      <div className="flex items-center">
-                        <span className="text-lg mr-2">
-                          {getFileIcon(url)}
-                        </span>
-                        <span className="text-sm truncate max-w-xs">
-                          {url.split("/").pop()}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleRemoveDocumentFromCurrentRecord(idx)}
-                        className="text-xs bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded"
+                  {currentRecord.document_urls.map((url, idx) => {
+                    // Check if this document has pending operations
+                    const hasRemoveOperation = pendingOperations.some(
+                      op => op.type === 'remove' && op.url === url && op.recordIndex === -1
+                    );
+                    
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex justify-between items-center bg-white p-2 rounded border border-blue-100 ${
+                          hasRemoveOperation ? 'opacity-50 bg-red-50' : ''
+                        }`}
                       >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center">
+                          <span className="text-lg mr-2">
+                            {getFileIcon(url)}
+                          </span>
+                          <span className="text-sm truncate max-w-xs">
+                            {url.split("/").pop()}
+                          </span>
+                          {hasRemoveOperation && (
+                            <span className="ml-2 text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                              Marked for deletion
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleRemoveDocumentFromCurrentRecord(idx)}
+                          className="text-xs bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded"
+                          disabled={hasRemoveOperation}
+                        >
+                          {hasRemoveOperation ? 'Marked' : 'Remove'}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -475,8 +530,8 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
             <ul className="mt-1 ml-4 list-disc">
               {pendingOperations.map((op, idx) => (
                 <li key={idx}>
-                  {op.type === 'add' && 'New document added'}
-                  {op.type === 'remove' && 'Document marked for deletion'}
+                  {op.type === 'add' && `New document added${op.addedInSession ? ' (in this session)' : ''}`}
+                  {op.type === 'remove' && `Document marked for deletion${op.addedInSession ? ' (was added in this session)' : ''}`}
                   {op.type === 'remove_record' && 'Record marked for deletion'}
                 </li>
               ))}

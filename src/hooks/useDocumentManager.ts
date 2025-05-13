@@ -1,4 +1,4 @@
-// src/hooks/useDocumentManager.ts - Enhanced with record-level deferred deletion
+// src/hooks/useDocumentManager.ts - Enhanced with better operation tracking
 import { useState, useCallback } from "react";
 import { extractPublicIdFromUrl } from "@/utils/cloudinaryUploader";
 
@@ -10,6 +10,9 @@ export interface DocumentOperation {
   recordDocuments?: string[]; // For record removal, store all URLs
   id: string; // Unique ID for tracking
   timestamp: number;
+  // New properties to track operation lifecycle
+  isTemporary?: boolean; // For operations within the same session
+  addedInSession?: boolean; // Track if this was added in current session
 }
 
 interface UseDocumentManagerProps {
@@ -46,6 +49,7 @@ export const useDocumentManager = ({
         url,
         recordIndex,
         timestamp: Date.now(),
+        addedInSession: true, // Mark as added in this session
       };
 
       setPendingOperations((prev) => [...prev, operation]);
@@ -76,6 +80,11 @@ export const useDocumentManager = ({
         // Remove from UI immediately
         onRemoveDocument(recordIndex, documentIndex);
 
+        // Check if this document was added in the same session
+        const wasAddedInSession = pendingOperations.some(
+          op => op.type === "add" && op.url === url && op.addedInSession
+        );
+
         // Track for potential restoration/cleanup
         const operation: DocumentOperation = {
           id: operationId,
@@ -84,6 +93,7 @@ export const useDocumentManager = ({
           recordIndex,
           documentIndex,
           timestamp: Date.now(),
+          addedInSession: wasAddedInSession, // Track if it was added in this session
         };
 
         setPendingOperations((prev) => [...prev, operation]);
@@ -96,7 +106,7 @@ export const useDocumentManager = ({
         setIsProcessing(false);
       }
     },
-    [onRemoveDocument]
+    [onRemoveDocument, pendingOperations]
   );
 
   // NEW: Mark record for deferred deletion
@@ -109,19 +119,25 @@ export const useDocumentManager = ({
         .toString(36)
         .substr(2, 9)}`;
 
-      const operation: DocumentOperation = {
+      // Check which documents were added in this session
+      const operationWithSessionInfo: DocumentOperation = {
         id: operationId,
         type: "remove_record",
         url: "", // Not applicable for record operations
         recordIndex,
-        recordDocuments: documentUrls,
+        recordDocuments: documentUrls.map(url => {
+          const wasAddedInSession = pendingOperations.some(
+            op => op.type === "add" && op.url === url && op.addedInSession
+          );
+          return url;
+        }),
         timestamp: Date.now(),
       };
 
-      setPendingOperations((prev) => [...prev, operation]);
-      return operation;
+      setPendingOperations((prev) => [...prev, operationWithSessionInfo]);
+      return operationWithSessionInfo;
     },
-    []
+    [pendingOperations]
   );
 
   // Actually delete from Cloudinary (when saving)
@@ -147,30 +163,68 @@ export const useDocumentManager = ({
     [clinicId]
   );
 
-  // Rollback pending operations (for cancel scenarios)
+  // Enhanced rollback pending operations (for cancel scenarios)
   const rollbackPendingOperations = useCallback(async () => {
     setIsProcessing(true);
 
     try {
-      // Sort operations by timestamp (newest first) for proper rollback
-      const sortedOperations = [...pendingOperations].sort(
-        (a, b) => b.timestamp - a.timestamp
-      );
+      // Group operations by URL to handle add-then-remove scenarios
+      const operationsByUrl = new Map<string, DocumentOperation[]>();
+      
+      pendingOperations.forEach(op => {
+        if (op.url) { // Skip record operations which don't have URLs
+          const ops = operationsByUrl.get(op.url) || [];
+          ops.push(op);
+          operationsByUrl.set(op.url, ops);
+        }
+      });
 
-      for (const operation of sortedOperations) {
-        if (operation.type === "add") {
-          // Delete newly added files from Cloudinary
+      // Process each URL's operations
+      for (const [url, operations] of operationsByUrl) {
+        const addOp = operations.find(op => op.type === "add");
+        const removeOp = operations.find(op => op.type === "remove");
+
+        if (addOp && removeOp) {
+          // File was added then removed in the same session
+          // Need to delete from Cloudinary since it was uploaded
           try {
-            await deleteFromCloudinary(operation.url);
+            await deleteFromCloudinary(url);
+            console.log(`Cleaned up file that was added then removed: ${url}`);
           } catch (error) {
-            console.warn(
-              `Failed to cleanup file during rollback: ${operation.url}`,
-              error
-            );
+            console.warn(`Failed to cleanup file during rollback: ${url}`, error);
+          }
+        } else if (addOp && !removeOp) {
+          // File was only added, need to delete
+          try {
+            await deleteFromCloudinary(url);
+            console.log(`Cleaned up added file during rollback: ${url}`);
+          } catch (error) {
+            console.warn(`Failed to cleanup added file during rollback: ${url}`, error);
           }
         }
-        // Note: We don't restore removed files since they're not actually deleted from Cloudinary yet
-        // Note: We don't restore removed records since they're not actually deleted yet
+        // If only removeOp exists, the file was not uploaded in this session,
+        // so we don't need to delete it from Cloudinary
+      }
+
+      // Handle record removal operations
+      for (const operation of pendingOperations) {
+        if (operation.type === "remove_record" && operation.recordDocuments) {
+          // For each document in the record, check if it was added in this session
+          for (const url of operation.recordDocuments) {
+            const wasAddedInSession = pendingOperations.some(
+              op => op.type === "add" && op.url === url && op.addedInSession
+            );
+            
+            if (wasAddedInSession) {
+              try {
+                await deleteFromCloudinary(url);
+                console.log(`Cleaned up record document that was added in session: ${url}`);
+              } catch (error) {
+                console.warn(`Failed to cleanup record document during rollback: ${url}`, error);
+              }
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("Error during rollback:", error);
@@ -180,7 +234,7 @@ export const useDocumentManager = ({
     }
   }, [pendingOperations, deleteFromCloudinary]);
 
-  // Commit all pending operations (when saving)
+  // Rest of the methods remain the same
   const commitPendingOperations = useCallback(async () => {
     setIsProcessing(true);
     const errors: string[] = [];
@@ -189,22 +243,31 @@ export const useDocumentManager = ({
       // Process all operations
       for (const operation of pendingOperations) {
         if (operation.type === "remove") {
-          // Single document removal
-          try {
-            await deleteFromCloudinary(operation.url);
-          } catch (error) {
-            console.error(`Failed to delete ${operation.url}:`, error);
-            errors.push(operation.url);
+          // Single document removal - only delete if not added in this session
+          if (!operation.addedInSession) {
+            try {
+              await deleteFromCloudinary(operation.url);
+            } catch (error) {
+              console.error(`Failed to delete ${operation.url}:`, error);
+              errors.push(operation.url);
+            }
           }
         } else if (operation.type === "remove_record") {
           // Record removal - delete all associated documents
           if (operation.recordDocuments) {
             for (const url of operation.recordDocuments) {
-              try {
-                await deleteFromCloudinary(url);
-              } catch (error) {
-                console.error(`Failed to delete ${url}:`, error);
-                errors.push(url);
+              // Check if this document was added in this session
+              const wasAddedInSession = pendingOperations.some(
+                op => op.type === "add" && op.url === url && op.addedInSession
+              );
+              
+              if (!wasAddedInSession) {
+                try {
+                  await deleteFromCloudinary(url);
+                } catch (error) {
+                  console.error(`Failed to delete ${url}:`, error);
+                  errors.push(url);
+                }
               }
             }
           }

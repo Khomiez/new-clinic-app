@@ -247,7 +247,7 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {/* Dashboard Summary Cards */}
+          Dashboard Summary Cards
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card
               cardTopic="ผู้ป่วยทั้งหมด"
@@ -415,12 +415,12 @@ export default function AdminDashboard() {
                 selectedClinic && (
                   <div className="text-center py-8 text-blue-500">
                     <div className="text-3xl mb-2">📋</div>
-                    <p>No patients are currently registered for this clinic.</p>
+                    <p>ปัจจุบันไม่มีเวชระเบียนในคลินิกนี้</p>
                     <button
                       onClick={handleAddPatient}
                       className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
                     >
-                      Add Your First Patient
+                      เพิ่มผู้ป่วยคนแรก
                     </button>
                   </div>
                 )}
@@ -431,7 +431,7 @@ export default function AdminDashboard() {
                 filteredPatients.length === 0 && (
                   <div className="text-center py-8 text-blue-400">
                     <div className="text-3xl mb-2">🔍</div>
-                    <p>No patients found matching your search criteria.</p>
+                    <p>ไม่พบผู้ป่วยที่ตรงตามเกณฑ์การค้นหาของคุณ</p>
                   </div>
                 )}
             </div>
