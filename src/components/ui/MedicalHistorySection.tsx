@@ -1,4 +1,4 @@
-// src/components/ui/MedicalHistorySection.tsx - Without save/cancel buttons, using passed documentManager
+// src/components/ui/MedicalHistorySection.tsx - With deferred record deletion and proper props
 import React, { useState, useEffect } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import HistoryRecord from "./HistoryRecord";
@@ -16,15 +16,20 @@ interface MedicalHistorySectionProps {
   onUpdateRecordDate: (index: number, newDate: Date) => void;
   onAddDocument: (recordIndex: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
-  // New props from parent's documentManager
+  // Document manager props
   pendingOperations: DocumentOperation[];
   isProcessing: boolean;
   addDocumentWithRollback: (recordIndex: number, url: string, shouldCommit?: boolean) => Promise<DocumentOperation>;
   removeDocumentWithDeferred: (recordIndex: number, documentIndex: number, url: string) => Promise<DocumentOperation>;
+  markRecordForDeletion: (recordIndex: number, documentUrls: string[]) => Promise<DocumentOperation>;
   rollbackPendingOperations: () => Promise<void>;
   commitPendingOperations: () => Promise<void>;
   cleanupOrphanedFiles: (urls: string[]) => Promise<{ success: boolean; errors?: any[] }>;
+  isRecordMarkedForDeletion: (recordIndex: number) => boolean;
+  getPendingRecordOperations: () => DocumentOperation[];
+  removePendingRecordDeletion: (recordIndex: number) => void;
 }
+
 
 const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   patientId,
@@ -40,9 +45,13 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
   isProcessing,
   addDocumentWithRollback,
   removeDocumentWithDeferred,
+  markRecordForDeletion,
   rollbackPendingOperations,
   commitPendingOperations,
   cleanupOrphanedFiles,
+  isRecordMarkedForDeletion,
+  getPendingRecordOperations,
+  removePendingRecordDeletion,
 }) => {
   const [isAddingRecord, setIsAddingRecord] = useState<boolean>(false);
   const [currentRecord, setCurrentRecord] = useState<IHistoryRecord>({
@@ -154,9 +163,15 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     });
   };
 
-  const handleRemoveRecord = (index: number) => {
+  // Updated: Use deferred deletion for records
+  const handleRemoveRecord = async (index: number) => {
     const record = historyRecords[index];
     const documentCount = record.document_urls?.length || 0;
+    
+    // Don't process if already marked for deletion
+    if (isRecordMarkedForDeletion(index)) {
+      return;
+    }
     
     setShowDeleteConfirmation({
       show: true,
@@ -164,7 +179,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       title: "Delete Medical Record",
       message: `Are you sure you want to delete this record?${
         documentCount > 0 
-          ? ` This will also permanently delete ${documentCount} attached document${documentCount > 1 ? 's' : ''}.`
+          ? ` This will also mark ${documentCount} document${documentCount > 1 ? 's' : ''} for deletion when you save changes.`
           : ''
       }`,
       onConfirm: async () => {
@@ -172,28 +187,28 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
           // Get the document URLs from the record
           const documentUrls = record.document_urls || [];
           
-          if (documentUrls.length > 0) {
-            // Clean up files first
-            const cleanupResult = await cleanupOrphanedFiles(documentUrls);
-            
-            if (!cleanupResult.success) {
-              if (!confirm(`Some files could not be deleted from storage. Continue anyway?`)) {
-                setShowDeleteConfirmation({ show: false });
-                return;
-              }
-            }
-          }
+          // Mark record for deferred deletion (don't delete files yet)
+          await markRecordForDeletion(index, documentUrls);
           
-          // Remove from local state
+          // Remove from UI immediately (this will be reverted if user cancels)
           onRemoveRecord(index);
           setShowDeleteConfirmation({ show: false });
         } catch (error) {
-          console.error('Error removing record:', error);
-          alert('Failed to delete record. Please try again.');
+          console.error('Error marking record for deletion:', error);
+          alert('Failed to mark record for deletion. Please try again.');
           setShowDeleteConfirmation({ show: false });
         }
       }
     });
+  };
+
+  // Updated: Handle undo for records marked for deletion
+  const handleUndoRecordDeletion = (recordIndex: number) => {
+    // Remove the pending record deletion operation
+    removePendingRecordDeletion(recordIndex);
+    
+    // The parent component will handle restoring the record to the UI
+    // Since we only mark records for deletion but don't actually remove them from state
   };
 
   const formatDateTimeForInput = (date: Date | string): string => {
@@ -395,20 +410,44 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       {/* Records List */}
       <div className="space-y-5">
         {historyRecords && historyRecords.length > 0 ? (
-          historyRecords.map((record, index) => (
-            <HistoryRecord
-              key={index}
-              record={record}
-              index={index}
-              clinicId={clinicId}
-              patientId={patientId}
-              onRemove={() => handleRemoveRecord(index)}
-              onUpdateDate={onUpdateRecordDate}
-              onAddDocument={onAddDocument}
-              onRemoveDocument={onRemoveDocument}
-              pendingOperations={pendingOperations}
-            />
-          ))
+          historyRecords.map((record, index) => {
+            const isMarkedForDeletion = isRecordMarkedForDeletion(index);
+            
+            return (
+              <div key={index} className="relative">
+                {/* Deletion overlay */}
+                {isMarkedForDeletion && (
+                  <div className="absolute inset-0 bg-red-50 bg-opacity-90 rounded-xl flex items-center justify-center z-10">
+                    <div className="text-center">
+                      <p className="text-red-600 font-medium mb-2">
+                        ❌ Record marked for deletion
+                      </p>
+                      <button
+                        onClick={() => handleUndoRecordDeletion(index)}
+                        className="px-3 py-1 bg-white text-red-600 border border-red-300 rounded-lg hover:bg-red-50 text-sm"
+                      >
+                        Undo
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                <div className={`${isMarkedForDeletion ? 'opacity-30' : ''}`}>
+                  <HistoryRecord
+                    record={record}
+                    index={index}
+                    clinicId={clinicId}
+                    patientId={patientId}
+                    onRemove={() => handleRemoveRecord(index)}
+                    onUpdateDate={onUpdateRecordDate}
+                    onAddDocument={onAddDocument}
+                    onRemoveDocument={onRemoveDocument}
+                    pendingOperations={pendingOperations}
+                  />
+                </div>
+              </div>
+            );
+          })
         ) : (
           <div className="text-center py-10 bg-blue-50 rounded-xl">
             <div className="text-5xl mb-3">📋</div>
@@ -430,6 +469,20 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
           <span className="font-bold">Note:</span> Changes to medical history will be saved 
           when you click the "Save Changes" button at the top of the page.
         </p>
+        {pendingOperations.length > 0 && (
+          <div className="mt-2 text-xs text-orange-700">
+            <strong>Pending changes:</strong>
+            <ul className="mt-1 ml-4 list-disc">
+              {pendingOperations.map((op, idx) => (
+                <li key={idx}>
+                  {op.type === 'add' && 'New document added'}
+                  {op.type === 'remove' && 'Document marked for deletion'}
+                  {op.type === 'remove_record' && 'Record marked for deletion'}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

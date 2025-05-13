@@ -1,12 +1,13 @@
-// src/hooks/useDocumentManager.ts - Enhanced with better rollback functionality
+// src/hooks/useDocumentManager.ts - Enhanced with record-level deferred deletion
 import { useState, useCallback } from "react";
 import { extractPublicIdFromUrl } from "@/utils/cloudinaryUploader";
 
 export interface DocumentOperation {
-  type: "add" | "remove";
+  type: "add" | "remove" | "remove_record";
   url: string;
   recordIndex: number;
-  documentIndex?: number;
+  documentIndex?: number; // Only for single document removal
+  recordDocuments?: string[]; // For record removal, store all URLs
   id: string; // Unique ID for tracking
   timestamp: number;
 }
@@ -22,15 +23,19 @@ export const useDocumentManager = ({
   onRemoveDocument,
   clinicId,
 }: UseDocumentManagerProps) => {
-  const [pendingOperations, setPendingOperations] = useState<DocumentOperation[]>([]);
+  const [pendingOperations, setPendingOperations] = useState<
+    DocumentOperation[]
+  >([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Track document additions for potential rollback
   const addDocumentWithRollback = useCallback(
     async (recordIndex: number, url: string, shouldCommit: boolean = false) => {
       // Create unique operation ID
-      const operationId = `add_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+      const operationId = `add_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
       // Add to UI immediately
       onAddDocument(recordIndex, url);
 
@@ -40,7 +45,7 @@ export const useDocumentManager = ({
         type: "add",
         url,
         recordIndex,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
 
       setPendingOperations((prev) => [...prev, operation]);
@@ -64,8 +69,10 @@ export const useDocumentManager = ({
 
       try {
         // Create unique operation ID
-        const operationId = `remove_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
+        const operationId = `remove_${Date.now()}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
+
         // Remove from UI immediately
         onRemoveDocument(recordIndex, documentIndex);
 
@@ -76,7 +83,7 @@ export const useDocumentManager = ({
           url,
           recordIndex,
           documentIndex,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         };
 
         setPendingOperations((prev) => [...prev, operation]);
@@ -92,25 +99,53 @@ export const useDocumentManager = ({
     [onRemoveDocument]
   );
 
+  // NEW: Mark record for deferred deletion
+  const markRecordForDeletion = useCallback(
+    async (
+      recordIndex: number,
+      documentUrls: string[]
+    ): Promise<DocumentOperation> => {
+      const operationId = `remove_record_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
+      const operation: DocumentOperation = {
+        id: operationId,
+        type: "remove_record",
+        url: "", // Not applicable for record operations
+        recordIndex,
+        recordDocuments: documentUrls,
+        timestamp: Date.now(),
+      };
+
+      setPendingOperations((prev) => [...prev, operation]);
+      return operation;
+    },
+    []
+  );
+
   // Actually delete from Cloudinary (when saving)
-  const deleteFromCloudinary = useCallback(async (url: string) => {
-    try {
-      const response = await fetch(
-        `/api/clinic/${clinicId}/files?url=${encodeURIComponent(url)}`,
-        { method: "DELETE" }
-      );
+  const deleteFromCloudinary = useCallback(
+    async (url: string) => {
+      try {
+        const response = await fetch(
+          `/api/clinic/${clinicId}/files?url=${encodeURIComponent(url)}`,
+          { method: "DELETE" }
+        );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to delete from storage");
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to delete from storage");
+        }
+
+        return true;
+      } catch (error) {
+        console.error("Error deleting from Cloudinary:", error);
+        throw error;
       }
-
-      return true;
-    } catch (error) {
-      console.error("Error deleting from Cloudinary:", error);
-      throw error;
-    }
-  }, [clinicId]);
+    },
+    [clinicId]
+  );
 
   // Rollback pending operations (for cancel scenarios)
   const rollbackPendingOperations = useCallback(async () => {
@@ -118,7 +153,9 @@ export const useDocumentManager = ({
 
     try {
       // Sort operations by timestamp (newest first) for proper rollback
-      const sortedOperations = [...pendingOperations].sort((a, b) => b.timestamp - a.timestamp);
+      const sortedOperations = [...pendingOperations].sort(
+        (a, b) => b.timestamp - a.timestamp
+      );
 
       for (const operation of sortedOperations) {
         if (operation.type === "add") {
@@ -126,10 +163,14 @@ export const useDocumentManager = ({
           try {
             await deleteFromCloudinary(operation.url);
           } catch (error) {
-            console.warn(`Failed to cleanup file during rollback: ${operation.url}`, error);
+            console.warn(
+              `Failed to cleanup file during rollback: ${operation.url}`,
+              error
+            );
           }
         }
         // Note: We don't restore removed files since they're not actually deleted from Cloudinary yet
+        // Note: We don't restore removed records since they're not actually deleted yet
       }
     } catch (error) {
       console.error("Error during rollback:", error);
@@ -145,23 +186,39 @@ export const useDocumentManager = ({
     const errors: string[] = [];
 
     try {
-      // Process all remove operations (actually delete from Cloudinary)
-      const removeOperations = pendingOperations.filter(op => op.type === "remove");
-      
-      for (const operation of removeOperations) {
-        try {
-          await deleteFromCloudinary(operation.url);
-        } catch (error) {
-          console.error(`Failed to delete ${operation.url}:`, error);
-          errors.push(operation.url);
+      // Process all operations
+      for (const operation of pendingOperations) {
+        if (operation.type === "remove") {
+          // Single document removal
+          try {
+            await deleteFromCloudinary(operation.url);
+          } catch (error) {
+            console.error(`Failed to delete ${operation.url}:`, error);
+            errors.push(operation.url);
+          }
+        } else if (operation.type === "remove_record") {
+          // Record removal - delete all associated documents
+          if (operation.recordDocuments) {
+            for (const url of operation.recordDocuments) {
+              try {
+                await deleteFromCloudinary(url);
+              } catch (error) {
+                console.error(`Failed to delete ${url}:`, error);
+                errors.push(url);
+              }
+            }
+          }
         }
+        // Note: "add" operations don't need commit action - they're already in Cloudinary
       }
 
       // Clear all pending operations
       setPendingOperations([]);
 
       if (errors.length > 0) {
-        throw new Error(`Failed to delete ${errors.length} file(s) from storage`);
+        throw new Error(
+          `Failed to delete ${errors.length} file(s) from storage`
+        );
       }
     } catch (error) {
       console.error("Error committing operations:", error);
@@ -171,7 +228,7 @@ export const useDocumentManager = ({
     }
   }, [pendingOperations, deleteFromCloudinary]);
 
-  // Cleanup orphaned files when deleting records/patients
+  // Cleanup orphaned files immediately (for immediate deletions like patient deletion)
   const cleanupOrphanedFiles = useCallback(async (urls: string[]) => {
     if (urls.length === 0) return { success: true, errors: [] };
 
@@ -190,16 +247,53 @@ export const useDocumentManager = ({
     }
   }, []);
 
+  // Helper to check if operation exists
+  const hasPendingOperation = useCallback(
+    (url: string) => pendingOperations.some((op) => op.url === url),
+    [pendingOperations]
+  );
+
+  // Helper to check if a record is marked for deletion
+  const isRecordMarkedForDeletion = useCallback(
+    (recordIndex: number) =>
+      pendingOperations.some(
+        (op) => op.type === "remove_record" && op.recordIndex === recordIndex
+      ),
+    [pendingOperations]
+  );
+
+  // Helper to get pending record operations
+  const getPendingRecordOperations = useCallback(
+    () => pendingOperations.filter((op) => op.type === "remove_record"),
+    [pendingOperations]
+  );
+
+  const removePendingOperation = useCallback((operationId: string) => {
+    setPendingOperations((prev) => prev.filter((op) => op.id !== operationId));
+  }, []);
+
+  // Helper to remove pending record deletion (for undo functionality)
+  const removePendingRecordDeletion = useCallback((recordIndex: number) => {
+    setPendingOperations((prev) =>
+      prev.filter(
+        (op) => !(op.type === "remove_record" && op.recordIndex === recordIndex)
+      )
+    );
+  }, []);
+
   return {
     addDocumentWithRollback,
     removeDocumentWithDeferred,
+    markRecordForDeletion,
     rollbackPendingOperations,
     commitPendingOperations,
     cleanupOrphanedFiles,
     isProcessing,
     pendingOperations,
-    // Helper to check if operation exists
-    hasPendingOperation: useCallback((url: string) => 
-      pendingOperations.some(op => op.url === url), [pendingOperations])
+    hasPendingOperation,
+    isRecordMarkedForDeletion,
+    getPendingRecordOperations,
+    removePendingOperation,
+    removePendingRecordDeletion,
   };
 };

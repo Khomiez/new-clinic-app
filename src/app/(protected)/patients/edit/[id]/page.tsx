@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - Updated to use single documentManager
+// src/app/(protected)/patients/edit/[id]/page.tsx - Updated with proper deferred record deletion
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -83,22 +83,22 @@ export default function EditPatient({ params }: { params: { id: string } }) {
       setPatient((prev) => {
         if (!prev.history) return prev;
 
-        // Make sure we don't exceed the bounds of the array
-        if (recordIndex < 0 || recordIndex >= prev.history.length) {
-          console.error(`Invalid record index: ${recordIndex}. Valid range: 0-${prev.history.length - 1}`);
+        // Adjust for removed records when adding documents
+        const actualIndex = getActualRecordIndex(recordIndex);
+        if (actualIndex < 0 || actualIndex >= prev.history.length) {
+          console.error(`Invalid record index: ${actualIndex}`);
           return prev;
         }
 
         const updatedHistory = [...prev.history];
-        const record = updatedHistory[recordIndex];
+        const record = updatedHistory[actualIndex];
 
-        // Check if the record exists
         if (!record) {
-          console.error(`Record at index ${recordIndex} is undefined`);
+          console.error(`Record at index ${actualIndex} is undefined`);
           return prev;
         }
 
-        updatedHistory[recordIndex] = {
+        updatedHistory[actualIndex] = {
           ...record,
           document_urls: [...(record.document_urls || []), url],
         };
@@ -113,28 +113,27 @@ export default function EditPatient({ params }: { params: { id: string } }) {
       setPatient((prev) => {
         if (!prev.history) return prev;
 
-        // Make sure we don't exceed the bounds of the array
-        if (recordIndex < 0 || recordIndex >= prev.history.length) {
-          console.error(`Invalid record index: ${recordIndex}. Valid range: 0-${prev.history.length - 1}`);
+        // Adjust for removed records when removing documents
+        const actualIndex = getActualRecordIndex(recordIndex);
+        if (actualIndex < 0 || actualIndex >= prev.history.length) {
+          console.error(`Invalid record index: ${actualIndex}`);
           return prev;
         }
 
         const updatedHistory = [...prev.history];
-        const record = updatedHistory[recordIndex];
+        const record = updatedHistory[actualIndex];
 
-        // Check if the record exists
         if (!record) {
-          console.error(`Record at index ${recordIndex} is undefined`);
+          console.error(`Record at index ${actualIndex} is undefined`);
           return prev;
         }
 
-        // Check if the document_urls array exists and has the specified document
         if (!record.document_urls || documentIndex < 0 || documentIndex >= record.document_urls.length) {
-          console.error(`Invalid document index: ${documentIndex} for record ${recordIndex}`);
+          console.error(`Invalid document index: ${documentIndex} for record ${actualIndex}`);
           return prev;
         }
 
-        updatedHistory[recordIndex] = {
+        updatedHistory[actualIndex] = {
           ...record,
           document_urls: record.document_urls.filter((_, i) => i !== documentIndex),
         };
@@ -147,6 +146,13 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     },
     clinicId: clinicId || '',
   });
+
+  // Helper function to get actual record index (accounting for removed records)
+  const getActualRecordIndex = (displayIndex: number) => {
+    // Since we're not actually removing records from state anymore,
+    // we can use the display index directly
+    return displayIndex;
+  };
 
   // Fetch admin data and clinics when component mounts
   useEffect(() => {
@@ -273,12 +279,24 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     setIsSaving(true);
 
     try {
+      // Filter out records that are marked for deletion
+      const recordsMarkedForDeletion = documentManager.getPendingRecordOperations();
+      const filteredHistory = patient.history?.filter((_, index) => 
+        !documentManager.isRecordMarkedForDeletion(index)
+      );
+
+      // Prepare patient data for saving
+      const patientToSave = {
+        ...patient,
+        history: filteredHistory,
+      };
+
       // First save patient data
       await dispatch(
         updatePatient({
           patientId: toIdString(patient._id),
           clinicId,
-          patientData: patient,
+          patientData: patientToSave,
         })
       ).unwrap();
 
@@ -286,7 +304,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
       await documentManager.commitPendingOperations();
       
       // Update original state to current state
-      setOriginalPatient(JSON.parse(JSON.stringify(patient)));
+      setOriginalPatient(JSON.parse(JSON.stringify(patientToSave)));
       setHasUnsavedChanges(false);
 
       // Navigate back to dashboard after successful update
@@ -392,41 +410,18 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     });
   };
 
+  // Updated: Use deferred deletion for records
   const handleRemoveRecord = async (index: number) => {
-    if (
-      confirm(
-        "Are you sure you want to remove this record? This will also delete any attached documents."
-      )
-    ) {
-      try {
-        // Check if the record has documents
-        const recordToDelete = patient.history?.[index];
-
-        if (
-          recordToDelete?.document_urls &&
-          recordToDelete.document_urls.length > 0
-        ) {
-          // Mark documents for deletion but don't delete yet
-          // They will be deleted when the patient is saved
-          const urlsToDelete = recordToDelete.document_urls;
-          
-          // Add to pending operations for cleanup on save
-          for (let i = 0; i < urlsToDelete.length; i++) {
-            await documentManager.removeDocumentWithDeferred(index, i, urlsToDelete[i]);
-          }
-        }
-
-        // Remove from local state
-        setPatient((prev) => ({
-          ...prev,
-          history: prev.history?.filter((_, i) => i !== index),
-        }));
-      } catch (error) {
-        console.error("Error removing record:", error);
-        alert(
-          "There was a problem removing the record. Please try again."
-        );
-      }
+    // Get the record before removing it
+    const recordToRemove = patient.history?.[index];
+    if (recordToRemove) {
+      const documentUrls = recordToRemove.document_urls || [];
+      
+      // Mark the record for deferred deletion (don't actually delete yet)
+      await documentManager.markRecordForDeletion(index, documentUrls);
+      
+      // Don't remove from state - just mark it for visual indication
+      // The actual removal will happen only when saving
     }
   };
 
@@ -536,7 +531,9 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 <ul className="text-orange-600 text-xs mt-1 ml-4 list-disc">
                   {documentManager.pendingOperations.map((op, idx) => (
                     <li key={idx}>
-                      {op.type === 'add' ? 'Delete newly added file' : 'Restore removed file'}
+                      {op.type === 'add' ? 'Delete newly added file' : 
+                       op.type === 'remove' ? 'Restore removed file' :
+                       op.type === 'remove_record' ? 'Restore deleted record' : 'Unknown operation'}
                     </li>
                   ))}
                 </ul>
@@ -587,7 +584,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 {hasUnsavedChanges && (
                   <span className="text-sm bg-orange-100 text-orange-600 px-2 py-1 rounded">
                     {documentManager.pendingOperations.length > 0 
-                      ? `${documentManager.pendingOperations.length} pending file operations`
+                      ? `${documentManager.pendingOperations.length} pending operations`
                       : 'Unsaved changes'
                     }
                   </span>
@@ -598,12 +595,19 @@ export default function EditPatient({ params }: { params: { id: string } }) {
               </p>
               {documentManager.pendingOperations.length > 0 && (
                 <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
-                  <strong>File Operations Pending:</strong>
+                  <strong>Pending Operations:</strong>
                   <ul className="mt-1 ml-4 list-disc">
                     {documentManager.pendingOperations.map((op, idx) => (
                       <li key={idx}>
-                        {op.type === 'add' ? '📎 Added' : '🗑️ Marked for deletion'}: 
-                        <span className="ml-1 font-mono">{op.url.split('/').pop()}</span>
+                        {op.type === 'add' ? '📎 Added' : 
+                         op.type === 'remove' ? '🗑️ Marked for deletion' :
+                         op.type === 'remove_record' ? '📋 Record marked for deletion' : 'Unknown'}: 
+                        <span className="ml-1 font-mono">
+                          {op.type === 'remove_record' ? 
+                            `Record with ${op.recordDocuments?.length || 0} documents` :
+                            op.url.split('/').pop()
+                          }
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -746,14 +750,18 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 onUpdateRecordDate={handleUpdateRecordDate}
                 onAddDocument={handleAddDocument}
                 onRemoveDocument={handleRemoveDocument}
-                // Pass documentManager props
+                // Pass documentManager props with undo functionality
                 pendingOperations={documentManager.pendingOperations}
                 isProcessing={documentManager.isProcessing}
                 addDocumentWithRollback={documentManager.addDocumentWithRollback}
                 removeDocumentWithDeferred={documentManager.removeDocumentWithDeferred}
+                markRecordForDeletion={documentManager.markRecordForDeletion}
                 rollbackPendingOperations={documentManager.rollbackPendingOperations}
                 commitPendingOperations={documentManager.commitPendingOperations}
                 cleanupOrphanedFiles={documentManager.cleanupOrphanedFiles}
+                isRecordMarkedForDeletion={documentManager.isRecordMarkedForDeletion}
+                getPendingRecordOperations={documentManager.getPendingRecordOperations}
+                removePendingRecordDeletion={documentManager.removePendingRecordDeletion}
               />
             </div>
           </div>
