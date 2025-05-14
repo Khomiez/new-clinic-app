@@ -580,7 +580,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-blue-800 flex items-center gap-2">
-                Edit Patient <span className="text-xl">👩‍⚕️</span>
+                แก้ไขข้อมูลผู้ป่วย <span className="text-xl">👩‍⚕️</span>
                 {hasUnsavedChanges && (
                   <span className="text-sm bg-orange-100 text-orange-600 px-2 py-1 rounded">
                     {documentManager.pendingOperations.length > 0 
@@ -591,7 +591,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                 )}
               </h1>
               <p className="text-slate-500">
-                Update patient information and medical history
+              ปรับปรุงข้อมูลผู้ป่วยและประวัติการรักษา
               </p>
               {documentManager.pendingOperations.length > 0 && (
                 <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
@@ -646,7 +646,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
             <div className="lg:col-span-1">
               <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
                 <h2 className="text-xl text-blue-700 font-medium mb-4 flex items-center gap-2">
-                  Patient Details 📋
+                  ข้อมูลผู้ป่วย 📋
                 </h2>
                 
                 <div className="space-y-6">
@@ -656,7 +656,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                         className="block text-sm font-medium text-slate-600 mb-1"
                         htmlFor="name"
                       >
-                        Full Name <span className="text-red-500">*</span>
+                        ชื่อ-สกุล <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -686,9 +686,6 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                         disabled={true}
                         className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-100 cursor-not-allowed"
                       />
-                      <p className="text-xs text-blue-500 mt-1">
-                        HN code cannot be changed after creation
-                      </p>
                     </div>
                   </div>
 
@@ -697,7 +694,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                       className="block text-sm font-medium text-slate-600 mb-1"
                       htmlFor="ID_code"
                     >
-                      ID Number
+                      รหัสประชาชน
                     </label>
                     <input
                       type="text"
@@ -715,7 +712,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                       className="block text-sm font-medium text-slate-600 mb-1"
                       htmlFor="lastVisit"
                     >
-                      Last Visit Date
+                      วันที่เข้ารับบริการครั้งล่าสุด
                     </label>
                     <input
                       type="date"
@@ -729,7 +726,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
                   
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
                     <p className="text-sm text-blue-600">
-                      <span className="font-bold">Note:</span> Use the "Save Changes" button above to save all patient information and medical history.
+                      <span className="font-bold">Note:</span> ใช้ปุ่ม "save changes" ด้านบนเพื่อบันทึกข้อมูลผู้ป่วยและประวัติการรักษาทั้งหมด
                     </p>
                   </div>
                 </div>

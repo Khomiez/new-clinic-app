@@ -324,7 +324,7 @@ export default function AdminDashboard() {
                       รหัสประชาชน
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
-                      ใช้บริการล่าสุด
+                      เข้ารับบริการล่าสุด
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
                       แก้ไขล่าสุด

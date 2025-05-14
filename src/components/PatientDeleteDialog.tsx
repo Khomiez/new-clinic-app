@@ -61,7 +61,7 @@ export const PatientDeleteDialog: React.FC<PatientDeleteDialogProps> = ({
             </h3>
             <div className="mb-6">
               <p className="text-gray-700 mb-4">
-                Are you sure you want to permanently delete <strong>{patient.name}</strong>?
+              คุณแน่ใจว่าต้องการลบถาวร <strong>{patient.name}</strong> หรือไม่?
               </p>
               
               {totalDocuments > 0 && (
@@ -69,7 +69,7 @@ export const PatientDeleteDialog: React.FC<PatientDeleteDialogProps> = ({
                   <div className="flex items-start">
                     <span className="text-yellow-500 text-lg mr-2">⚠️</span>
                     <div>
-                      <p className="text-yellow-800 font-medium">Warning: Document Deletion</p>
+                      <p className="text-yellow-800 font-medium">คำเตือน: การลบเอกสาร</p>
                       <p className="text-yellow-700 text-sm mt-1">
                         This patient has {totalDocuments} attached document{totalDocuments > 1 ? 's' : ''} 
                         that will be permanently deleted from cloud storage.
@@ -80,12 +80,12 @@ export const PatientDeleteDialog: React.FC<PatientDeleteDialogProps> = ({
               )}
 
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h4 className="font-medium text-gray-800 mb-2">Patient Information:</h4>
+                <h4 className="font-medium text-gray-800 mb-2">ข้อมูลผู้ป่วย:</h4>
                 <ul className="text-sm text-gray-600 space-y-1">
                   <li><span className="font-medium">HN Code:</span> {patient.HN_code}</li>
-                  <li><span className="font-medium">ID Code:</span> {patient.ID_code || 'N/A'}</li>
-                  <li><span className="font-medium">Medical Records:</span> {patient.history?.length || 0}</li>
-                  <li><span className="font-medium">Attached Documents:</span> {totalDocuments}</li>
+                  <li><span className="font-medium">รหัสประชาชน:</span> {patient.ID_code || 'N/A'}</li>
+                  <li><span className="font-medium">บันทึกการเข้ารับบริการ:</span> {patient.history?.length || 0}</li>
+                  <li><span className="font-medium">เอกสารทั้งหมด:</span> {totalDocuments}</li>
                 </ul>
               </div>
             </div>
@@ -110,7 +110,7 @@ export const PatientDeleteDialog: React.FC<PatientDeleteDialogProps> = ({
         {step === 'confirmation' && (
           <>
             <h3 className="text-xl font-bold text-red-600 mb-4">
-              Final Confirmation
+            การยืนยันขั้นสุดท้าย
             </h3>
             
             {deleteResult?.error && (
@@ -127,12 +127,12 @@ export const PatientDeleteDialog: React.FC<PatientDeleteDialogProps> = ({
 
             <div className="mb-6">
               <p className="text-gray-700 mb-4">
-                Please type the patient's name to confirm: <strong>{patient.name}</strong>
+              กรุณาพิมพ์ชื่อผู้ป่วยเพื่อยืนยัน: <strong>{patient.name}</strong>
               </p>
               
               <input
                 type="text"
-                placeholder="Type patient name here"
+                placeholder="พิมพ์ชื่อผู้ป่วยที่นี่"
                 className="w-full px-3 py-2 border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                 onChange={(e) => {
                   // You could add name verification here
@@ -148,7 +148,7 @@ export const PatientDeleteDialog: React.FC<PatientDeleteDialogProps> = ({
                     className="mr-2"
                   />
                   <span className="text-sm text-gray-700">
-                    Force delete even if some files cannot be removed from storage
+                  บังคับลบแม้ว่าบางไฟล์จะไม่สามารถลบออกจากที่จัดเก็บได้
                   </span>
                 </label>
               </div>

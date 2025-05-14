@@ -1,9 +1,15 @@
-// src/app/(protected)/patients/add/page.tsx
+// src/app/(protected)/patients/add/page.tsx - Updated to use PatientForm with save functionality
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Navbar, Sidebar, LoadingScreen, ErrorScreen, PatientForm } from "@/components";
+import {
+  Navbar,
+  Sidebar,
+  LoadingScreen,
+  ErrorScreen,
+  PatientForm,
+} from "@/components";
 import { IClinic } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
@@ -43,7 +49,11 @@ export default function AddPatient() {
   );
 
   // Get next HN code
-  const { nextHNCode, loading: hnLoading, error: hnError } = useNextHNCode(clinicId || undefined);
+  const {
+    nextHNCode,
+    loading: hnLoading,
+    error: hnError,
+  } = useNextHNCode(clinicId || undefined);
 
   // Fetch admin data and clinics when component mounts
   useEffect(() => {
@@ -115,7 +125,9 @@ export default function AddPatient() {
       // Create patient without HN_code - it will be auto-generated on the server
       const patientToSubmit = {
         ...patient,
-        HN_code: nextHNCode // This will be used as a fallback if the server-side logic fails
+        HN_code: nextHNCode, // This will be used as a fallback if the server-side logic fails
+        // Convert lastVisit to Date if it's a string
+        lastVisit: patient.lastVisit ? new Date(patient.lastVisit) : undefined,
       };
 
       await dispatch(
@@ -131,6 +143,10 @@ export default function AddPatient() {
       console.error("Failed to add patient:", error);
       alert("Failed to add patient. Please try again.");
     }
+  };
+
+  const handleCancel = () => {
+    router.push(`/dashboard`);
   };
 
   const handleClinicChange = (clinicId: string): void => {
@@ -194,10 +210,10 @@ export default function AddPatient() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-blue-800 flex items-center gap-2">
-                Add New Patient <span className="text-xl">👤</span>
+                เพิ่มผู้ป่วยใหม่ <span className="text-xl">👤</span>
               </h1>
               <p className="text-slate-500">
-                Create a new patient record in the system
+              สร้างประวัติผู้ป่วยใหม่ในระบบ
               </p>
             </div>
           </div>
@@ -205,7 +221,7 @@ export default function AddPatient() {
           {/* Main Content */}
           <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
             <h2 className="text-xl text-blue-700 font-medium mb-6 flex items-center gap-2">
-              Patient Details 📋
+              ข้อมูลผู้ป่วย 📋
             </h2>
 
             {selectedClinic ? (
@@ -215,7 +231,7 @@ export default function AddPatient() {
                 handleSubmit={handleSubmit}
                 isSubmitting={patientStatus === "pending"}
                 submitLabel="Add Patient"
-                cancelAction={() => router.push("/dashboard")}
+                cancelAction={handleCancel}
                 isEditMode={false}
                 nextHNCode={nextHNCode}
               />
@@ -223,11 +239,10 @@ export default function AddPatient() {
               <div className="text-center py-8 text-blue-500">
                 <div className="text-5xl mb-4">🏥</div>
                 <h3 className="text-xl font-medium mb-2">
-                  Select a Clinic First
+                  กรุณาเลือกคลินิกก่อน
                 </h3>
                 <p className="text-slate-500 mb-4">
-                  Please select a clinic from the sidebar before adding a
-                  patient.
+                  กรุณาเลือกคลินิกจากแถบด้านข้างก่อนเพิ่มผู้ป่วย
                 </p>
               </div>
             )}

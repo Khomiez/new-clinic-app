@@ -1,31 +1,39 @@
-// src/components/ui/PatientForm.tsx - Simplified for inline editing
+// src/components/ui/PatientForm.tsx - Enhanced with conditional save functionality
 import React from 'react';
 import { IPatient } from '@/interfaces';
 
 interface PatientFormProps {
   patient: Partial<IPatient>;
   handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleSubmit?: (e: React.FormEvent) => void; // Optional for edit mode
   isEditMode?: boolean;
   nextHNCode?: string;
   disabled?: boolean;
+  isSubmitting?: boolean;
+  submitLabel?: string;
+  cancelAction?: () => void;
 }
 
 const PatientForm: React.FC<PatientFormProps> = ({
   patient,
   handleChange,
+  handleSubmit,
   isEditMode = false,
   nextHNCode = "",
-  disabled = false
+  disabled = false,
+  isSubmitting = false,
+  submitLabel = "Add Patient",
+  cancelAction
 }) => {
   return (
-    <div className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 gap-6">
         <div>
           <label
             className="block text-sm font-medium text-slate-600 mb-1"
             htmlFor="name"
           >
-            Full Name <span className="text-red-500">*</span>
+            ชื่อ-สกุล <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -33,7 +41,7 @@ const PatientForm: React.FC<PatientFormProps> = ({
             name="name"
             value={patient.name || ""}
             onChange={handleChange}
-            placeholder="Enter patient's full name"
+            placeholder=""
             required
             disabled={disabled}
             className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -63,7 +71,7 @@ const PatientForm: React.FC<PatientFormProps> = ({
             </p>
           ) : (
             <p className="text-xs text-blue-500 mt-1">
-              This HN code will be automatically assigned
+              รหัส HN นี้จะถูกกำหนดโดยอัตโนมัติ
             </p>
           )}
         </div>
@@ -74,7 +82,7 @@ const PatientForm: React.FC<PatientFormProps> = ({
           className="block text-sm font-medium text-slate-600 mb-1"
           htmlFor="ID_code"
         >
-          ID Number
+          รหัสประชาชน
         </label>
         <input
           type="text"
@@ -82,7 +90,7 @@ const PatientForm: React.FC<PatientFormProps> = ({
           name="ID_code"
           value={patient.ID_code || ""}
           onChange={handleChange}
-          placeholder="Enter ID number (optional)"
+          placeholder="กรอกหมายเลขบัตรประชาชน (ไม่บังคับ)"
           disabled={disabled}
           className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
         />
@@ -93,7 +101,7 @@ const PatientForm: React.FC<PatientFormProps> = ({
           className="block text-sm font-medium text-slate-600 mb-1"
           htmlFor="lastVisit"
         >
-          Last Visit Date
+          วันที่เข้ารับบริการครั้งล่าสุด
         </label>
         <input
           type="date"
@@ -110,18 +118,51 @@ const PatientForm: React.FC<PatientFormProps> = ({
       <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
         <p className="text-sm text-blue-600">
           <span className="font-bold">Note:</span> {isEditMode 
-            ? 'Changes to patient information will be saved when you click "Save Changes" above.' 
-            : 'Medical history records can be added after creating the patient.'
+            ? 'การเปลี่ยนแปลงข้อมูลผู้ป่วยจะได้รับการบันทึกเมื่อคุณคลิก "save" ด้านบน' 
+            : 'สามารถเพิ่มบันทึกเวชระเบียนได้หลังจากสร้างผู้ป่วยแล้ว'
           }
         </p>
       </div>
       
+      {/* Show action buttons only for add mode (not edit mode) */}
+      {!isEditMode && handleSubmit && (
+        <div className="flex justify-end space-x-3 pt-4">
+          {cancelAction && (
+            <button
+              type="button"
+              onClick={cancelAction}
+              className="px-6 py-2 border border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={isSubmitting || disabled}
+            className="flex items-center px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? (
+              <>
+                <span className="animate-spin mr-2">⏳</span>
+                Adding...
+              </>
+            ) : (
+              <>
+                <span className="mr-2">➕</span>
+                {submitLabel}
+              </>
+            )}
+          </button>
+        </div>
+      )}
+      
       <div className="py-2">
         <p className="text-sm text-slate-500">
-          <span className="text-red-500">*</span> Required fields
+          <span className="text-red-500">*</span> ช่องที่จำเป็น
         </p>
       </div>
-    </div>
+    </form>
   );
 };
 

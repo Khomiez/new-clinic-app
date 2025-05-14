@@ -300,7 +300,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
 
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl text-blue-700 font-medium flex items-center gap-2">
-          <span>📁</span> Medical History
+          <span>📁</span> ประวัติการรักษาพยาบาล
           {pendingOperations.length > 0 && (
             <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">
               {pendingOperations.length} unsaved changes
