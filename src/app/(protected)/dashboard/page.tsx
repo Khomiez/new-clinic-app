@@ -8,9 +8,9 @@ import {
   Navbar,
   LoadingScreen,
   ErrorScreen,
-  Card,
-  Pagination,
 } from "@/components";
+import Card from "@/components/ui/Card";
+import Pagination from "@/components/ui/Pagination";
 import { PatientDeleteDialog } from "@/components/PatientDeleteDialog";
 import { IClinic, IPatient } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
@@ -46,9 +46,13 @@ export default function AdminDashboard() {
   const dispatch = useAppDispatch();
 
   // Local state
-  const [selectedClinic, setSelectedClinicState] = useState<IClinic | undefined>(undefined);
+  const [selectedClinic, setSelectedClinicState] = useState<
+    IClinic | undefined
+  >(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(
+    null
+  );
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     patient: IPatient | null;
@@ -59,17 +63,20 @@ export default function AdminDashboard() {
   const router = useRouter();
 
   // Debounced search function
-  const debouncedSearch = useCallback((term: string, clinicId: string) => {
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
-    
-    const timeout = setTimeout(() => {
-      dispatch(searchPatients({ clinicId, search: term }));
-    }, 500); // 500ms delay
-    
-    setSearchTimeout(timeout);
-  }, [dispatch, searchTimeout]);
+  const debouncedSearch = useCallback(
+    (term: string, clinicId: string) => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+
+      const timeout = setTimeout(() => {
+        dispatch(searchPatients({ clinicId, search: term }));
+      }, 500); // 500ms delay
+
+      setSearchTimeout(timeout);
+    },
+    [dispatch, searchTimeout]
+  );
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -132,9 +139,21 @@ export default function AdminDashboard() {
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
-    
+
     if (selectedClinic) {
       debouncedSearch(value, toIdString(selectedClinic._id));
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    if (selectedClinic) {
+      // Fetch all patients (without search)
+      dispatch(
+        fetchPatientsWithPagination({
+          clinicId: toIdString(selectedClinic._id),
+        })
+      );
     }
   };
 
@@ -175,13 +194,15 @@ export default function AdminDashboard() {
       ).unwrap();
 
       setDeleteDialog({ isOpen: false, patient: null });
-      
+
       // Refetch current page to update the list
       const currentPage = patientsState.pagination?.currentPage || 1;
-      dispatch(changePage({ 
-        clinicId: toIdString(selectedClinic._id), 
-        page: currentPage 
-      }));
+      dispatch(
+        changePage({
+          clinicId: toIdString(selectedClinic._id),
+          page: currentPage,
+        })
+      );
     } catch (error: any) {
       // Error is thrown back to the dialog component
       throw error;
@@ -207,19 +228,23 @@ export default function AdminDashboard() {
 
   const handlePageChange = (page: number) => {
     if (selectedClinic) {
-      dispatch(changePage({ 
-        clinicId: toIdString(selectedClinic._id), 
-        page 
-      }));
+      dispatch(
+        changePage({
+          clinicId: toIdString(selectedClinic._id),
+          page,
+        })
+      );
     }
   };
 
   const handlePageSizeChange = (newSize: number) => {
     if (selectedClinic) {
-      dispatch(changePageSize({ 
-        clinicId: toIdString(selectedClinic._id), 
-        limit: newSize 
-      }));
+      dispatch(
+        changePageSize({
+          clinicId: toIdString(selectedClinic._id),
+          limit: newSize,
+        })
+      );
     }
   };
 
@@ -306,7 +331,9 @@ export default function AdminDashboard() {
               cardEmoji="📝"
               cardValue={currentItems.length}
               cardDescription1="📄 "
-              cardDescription2={`หน้า ${pagination?.currentPage || 1} จาก ${pagination?.totalPages || 1}`}
+              cardDescription2={`หน้า ${pagination?.currentPage || 1} จาก ${
+                pagination?.totalPages || 1
+              }`}
             />
           </div>
 
@@ -345,21 +372,22 @@ export default function AdminDashboard() {
               </div>
               {searchTerm && (
                 <p className="text-sm text-blue-600 mt-2">
-                  ค้นหา: "{searchTerm}" - พบ {pagination?.totalItems || 0} รายการ
+                  ค้นหา: "{searchTerm}" - พบ {pagination?.totalItems || 0}{" "}
+                  รายการ
                 </p>
               )}
             </div>
 
-{/* Page Size Selector and Info */}
-{pagination && pagination.totalItems > 0 && (
+            {/* Page Size Selector and Info */}
+            {pagination && pagination.totalItems > 0 && (
               <div className="mb-4 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-blue-600">
-                    แสดงผลต่อหน้า:
-                  </span>
+                  <span className="text-sm text-blue-600">แสดงผลต่อหน้า:</span>
                   <select
                     value={pagination.itemsPerPage}
-                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                    onChange={(e) =>
+                      handlePageSizeChange(Number(e.target.value))
+                    }
                     className="px-3 py-1 border border-blue-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                     disabled={patientsState.loading === "pending"}
                   >
@@ -369,10 +397,10 @@ export default function AdminDashboard() {
                     <option value={50}>50 รายการ</option>
                   </select>
                 </div>
-                
+
                 <div className="text-sm text-blue-600">
-                  หน้า {pagination.currentPage} จาก {pagination.totalPages} 
-                  ({pagination.totalItems} รายการทั้งหมด)
+                  หน้า {pagination.currentPage} จาก {pagination.totalPages} (
+                  {pagination.totalItems} รายการทั้งหมด)
                 </div>
               </div>
             )}
@@ -470,9 +498,11 @@ export default function AdminDashboard() {
                   <button
                     onClick={() =>
                       selectedClinic &&
-                      dispatch(fetchPatientsWithPagination({ 
-                        clinicId: toIdString(selectedClinic._id) 
-                      }))
+                      dispatch(
+                        fetchPatientsWithPagination({
+                          clinicId: toIdString(selectedClinic._id),
+                        })
+                      )
                     }
                     className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
                   >
@@ -488,7 +518,9 @@ export default function AdminDashboard() {
                 selectedClinic && (
                   <div className="text-center py-8 text-blue-500">
                     <div className="text-5xl mb-3">📋</div>
-                    <h3 className="text-xl font-medium mb-2">ไม่มีเวชระเบียน</h3>
+                    <h3 className="text-xl font-medium mb-2">
+                      ไม่มีเวชระเบียน
+                    </h3>
                     <p className="text-blue-400 mb-4">
                       ปัจจุบันไม่มีเวชระเบียนในคลินิกนี้
                     </p>
@@ -507,7 +539,9 @@ export default function AdminDashboard() {
                 searchTerm && (
                   <div className="text-center py-8 text-blue-400">
                     <div className="text-5xl mb-3">🔍</div>
-                    <h3 className="text-xl font-medium mb-2">ไม่พบผลการค้นหา</h3>
+                    <h3 className="text-xl font-medium mb-2">
+                      ไม่พบผลการค้นหา
+                    </h3>
                     <p className="text-blue-400">
                       ไม่พบผู้ป่วยที่ตรงกับ "{searchTerm}"
                     </p>
@@ -530,9 +564,11 @@ export default function AdminDashboard() {
                 showInfo={false} // We're showing custom info above
                 showPageSizes={false} // We're showing page size selector above
                 totalItems={pagination.totalItems}
-                startIndex={(pagination.currentPage - 1) * pagination.itemsPerPage}
+                startIndex={
+                  (pagination.currentPage - 1) * pagination.itemsPerPage
+                }
                 endIndex={Math.min(
-                  pagination.currentPage * pagination.itemsPerPage, 
+                  pagination.currentPage * pagination.itemsPerPage,
                   pagination.totalItems
                 )}
                 disabled={patientsState.loading === "pending"}
