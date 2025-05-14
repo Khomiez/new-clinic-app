@@ -1,8 +1,10 @@
-// src/app/api/patient/route.ts
+// src/app/api/patient/route.ts - Updated with server-side pagination
 import { dbConnect } from "@/db";
 import PatientSchema from "@/models/Patient";
 import mongoose, { isValidObjectId } from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
+import { buildPaginationQuery, createPaginatedResponse } from "@/utils/paginationHelpers";
+import { PaginationParams } from "@/interfaces/IPagination";
 
 // Get the correct model for the specific clinic
 function getPatientModel(clinicId: string) {
@@ -20,6 +22,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const clinicId = searchParams.get("clinicId");
     const patientId = searchParams.get("id");
+    
+    // Extract pagination parameters
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const search = searchParams.get("search") || "";
+    const sortBy = searchParams.get("sortBy") || "createdAt";
+    const sortOrder = (searchParams.get("sortOrder") || "desc") as "asc" | "desc";
 
     if (!clinicId) {
       return NextResponse.json(
@@ -63,11 +72,40 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, patient });
     }
 
-    // Otherwise, get all patients for this clinic
-    const patients = await Patient.find({}).sort({ createdAt: -1 });
+    // Build pagination query
+    const paginationParams: PaginationParams = {
+      page,
+      limit,
+      search,
+      sortBy,
+      sortOrder,
+    };
 
-    // Return empty array even if no patients are found (not an error)
-    return NextResponse.json({ success: true, patients: patients || [] });
+    const searchFields = ["name", "HN_code", "ID_code"];
+    const { query, skip, sort } = buildPaginationQuery(paginationParams, searchFields);
+
+    // Execute query with pagination
+    const [patients, totalItems] = await Promise.all([
+      Patient.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean(), // Use lean() for better performance
+      Patient.countDocuments(query),
+    ]);
+
+    // Create paginated response
+    const paginatedResponse = createPaginatedResponse(
+      patients,
+      totalItems,
+      page,
+      limit
+    );
+
+    return NextResponse.json({ 
+      success: true, 
+      ...paginatedResponse
+    });
   } catch (error) {
     console.error("GET patients error:", error);
     return NextResponse.json(

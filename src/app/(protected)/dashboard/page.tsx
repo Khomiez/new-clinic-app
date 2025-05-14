@@ -1,7 +1,7 @@
-// src/app/(protected)/dashboard/page.tsx - Enhanced with better delete handling
+// src/app/(protected)/dashboard/page.tsx - Final version with server-side pagination
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sidebar,
@@ -9,6 +9,7 @@ import {
   LoadingScreen,
   ErrorScreen,
   Card,
+  Pagination,
 } from "@/components";
 import { PatientDeleteDialog } from "@/components/PatientDeleteDialog";
 import { IClinic, IPatient } from "@/interfaces";
@@ -16,7 +17,10 @@ import { useAppSelector } from "@/redux/hooks/useAppSelector";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
 import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
 import {
-  fetchPatients,
+  fetchPatientsWithPagination,
+  searchPatients,
+  changePage,
+  changePageSize,
   deletePatient,
   clearPatients,
 } from "@/redux/features/patients/patientsSlice";
@@ -28,7 +32,7 @@ import { toIdString } from "@/utils/mongoHelpers";
 // Format date for display
 const formatDate = (date: Date | string | undefined): string => {
   if (!date) return "N/A";
-  return new Date(date).toLocaleDateString();
+  return new Date(date).toLocaleDateString("th-TH");
 };
 
 export default function AdminDashboard() {
@@ -41,12 +45,10 @@ export default function AdminDashboard() {
   );
   const dispatch = useAppDispatch();
 
-  // Local state for selected clinic
-  const [selectedClinic, setSelectedClinicState] = useState<
-    IClinic | undefined
-  >(undefined);
+  // Local state
+  const [selectedClinic, setSelectedClinicState] = useState<IClinic | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [filteredPatients, setFilteredPatients] = useState<IPatient[]>([]);
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     patient: IPatient | null;
@@ -54,8 +56,29 @@ export default function AdminDashboard() {
 
   // Auth context
   const { isAuthenticated, logout, loading } = useAuth();
-
   const router = useRouter();
+
+  // Debounced search function
+  const debouncedSearch = useCallback((term: string, clinicId: string) => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    const timeout = setTimeout(() => {
+      dispatch(searchPatients({ clinicId, search: term }));
+    }, 500); // 500ms delay
+    
+    setSearchTimeout(timeout);
+  }, [dispatch, searchTimeout]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchTimeout]);
 
   // First, fetch admin data when component mounts
   useEffect(() => {
@@ -69,7 +92,7 @@ export default function AdminDashboard() {
     }
   }, [adminInfo.loading, adminInfo.id, dispatch]);
 
-  // Set the selected clinic based on persisted selection or default to first clinic
+  // Set the selected clinic and fetch patients
   useEffect(() => {
     if (
       clinicsState.loading === "succeeded" &&
@@ -84,7 +107,7 @@ export default function AdminDashboard() {
 
         if (savedClinic) {
           setSelectedClinicState(savedClinic);
-          dispatch(fetchPatients(selectedClinicId));
+          dispatch(fetchPatientsWithPagination({ clinicId: selectedClinicId }));
           return;
         }
       }
@@ -94,7 +117,7 @@ export default function AdminDashboard() {
         setSelectedClinicState(clinicsState.items[0]);
         const firstClinicId = toIdString(clinicsState.items[0]._id);
         dispatch(setSelectedClinic(firstClinicId));
-        dispatch(fetchPatients(firstClinicId));
+        dispatch(fetchPatientsWithPagination({ clinicId: firstClinicId }));
       }
     }
   }, [
@@ -105,25 +128,15 @@ export default function AdminDashboard() {
     dispatch,
   ]);
 
-  // Filter patients based on search term
-  useEffect(() => {
-    if (
-      patientsState.loading === "succeeded" &&
-      Array.isArray(patientsState.items)
-    ) {
-      const filtered = patientsState.items.filter(
-        (patient) =>
-          patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          patient.HN_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (patient.ID_code &&
-            patient.ID_code.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-
-      setFilteredPatients(filtered);
-    } else {
-      setFilteredPatients([]);
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    
+    if (selectedClinic) {
+      debouncedSearch(value, toIdString(selectedClinic._id));
     }
-  }, [patientsState.items, patientsState.loading, searchTerm]);
+  };
 
   const handleAddPatient = (): void => {
     if (selectedClinic) {
@@ -157,11 +170,18 @@ export default function AdminDashboard() {
         deletePatient({
           clinicId: toIdString(selectedClinic._id),
           patientId: toIdString(deleteDialog.patient._id),
-          forceDelete, // This would need to be added to the Redux action
+          forceDelete,
         })
       ).unwrap();
 
       setDeleteDialog({ isOpen: false, patient: null });
+      
+      // Refetch current page to update the list
+      const currentPage = patientsState.pagination?.currentPage || 1;
+      dispatch(changePage({ 
+        clinicId: toIdString(selectedClinic._id), 
+        page: currentPage 
+      }));
     } catch (error: any) {
       // Error is thrown back to the dialog component
       throw error;
@@ -173,6 +193,7 @@ export default function AdminDashboard() {
 
     // Clear patients when changing clinic
     dispatch(clearPatients());
+    setSearchTerm(""); // Reset search term
 
     const clinic = clinicsState.items.find(
       (c) => toIdString(c._id) === clinicId
@@ -180,7 +201,25 @@ export default function AdminDashboard() {
     if (clinic) {
       setSelectedClinicState(clinic);
       dispatch(setSelectedClinic(clinicId));
-      dispatch(fetchPatients(clinicId));
+      dispatch(fetchPatientsWithPagination({ clinicId }));
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    if (selectedClinic) {
+      dispatch(changePage({ 
+        clinicId: toIdString(selectedClinic._id), 
+        page 
+      }));
+    }
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    if (selectedClinic) {
+      dispatch(changePageSize({ 
+        clinicId: toIdString(selectedClinic._id), 
+        limit: newSize 
+      }));
     }
   };
 
@@ -200,10 +239,9 @@ export default function AdminDashboard() {
     );
   }
 
-  // Get the patients count
-  const patientsCount = Array.isArray(patientsState.items)
-    ? patientsState.items.length
-    : 0;
+  // Get pagination info
+  const pagination = patientsState.pagination;
+  const currentItems = patientsState.items || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
@@ -247,12 +285,12 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          Dashboard Summary Cards
+          {/* Dashboard Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card
               cardTopic="ผู้ป่วยทั้งหมด"
               cardEmoji="👥"
-              cardValue={patientsCount || 0}
+              cardValue={pagination?.totalItems || 0}
               cardDescription1="↑ 2 คน "
               cardDescription2="จากเดือนที่แล้ว"
             />
@@ -264,13 +302,11 @@ export default function AdminDashboard() {
               cardDescription2="จากเมื่อวาน"
             />
             <Card
-              cardTopic="รายการผู้ป่วยที่แสดง"
+              cardTopic="รายการในหน้านี้"
               cardEmoji="📝"
-              cardValue={filteredPatients.length}
-              cardDescription1="🔍 "
-              cardDescription2={
-                searchTerm ? "รายการที่ผ่านการกรอง" : "รายการทั้งหมด"
-              }
+              cardValue={currentItems.length}
+              cardDescription1="📄 "
+              cardDescription2={`หน้า ${pagination?.currentPage || 1} จาก ${pagination?.totalPages || 1}`}
             />
           </div>
 
@@ -290,7 +326,7 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Search and Filter */}
+            {/* Search Bar */}
             <div className="mb-6">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -300,14 +336,46 @@ export default function AdminDashboard() {
                   type="text"
                   placeholder="ค้นหาด้วย ชื่อ-สกุล, HN code, หรือ รหัสประชาชน..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={handleSearchChange}
                   className="block w-full pl-10 pr-3 py-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 focus:outline-none"
                   disabled={
-                    !selectedClinic || patientsState.loading !== "succeeded"
+                    !selectedClinic || patientsState.loading === "pending"
                   }
                 />
               </div>
+              {searchTerm && (
+                <p className="text-sm text-blue-600 mt-2">
+                  ค้นหา: "{searchTerm}" - พบ {pagination?.totalItems || 0} รายการ
+                </p>
+              )}
             </div>
+
+            {/* Page Size Selector and Info */}
+            {pagination && pagination.totalItems > 0 && (
+              <div className="mb-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-blue-600">
+                    แสดงผลต่อหน้า:
+                  </span>
+                  <select
+                    value={pagination.itemsPerPage}
+                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                    className="px-3 py-1 border border-blue-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    disabled={patientsState.loading === "pending"}
+                  >
+                    <option value={5}>5 รายการ</option>
+                    <option value={10}>10 รายการ</option>
+                    <option value={25}>25 รายการ</option>
+                    <option value={50}>50 รายการ</option>
+                  </select>
+                </div>
+                
+                <div className="text-sm text-blue-600">
+                  หน้า {pagination.currentPage} จาก {pagination.totalPages} 
+                  ({pagination.totalItems} รายการทั้งหมด)
+                </div>
+              </div>
+            )}
 
             {/* Patients Table */}
             <div className="overflow-x-auto">
@@ -330,15 +398,15 @@ export default function AdminDashboard() {
                       แก้ไขล่าสุด
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-blue-400 uppercase tracking-wider">
-                      จัดการ{" (แก้ไข/ลบ)"}
+                      จัดการ (แก้ไข/ลบ)
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-blue-100">
-                  {filteredPatients.map((patient) => (
+                  {currentItems.map((patient: IPatient) => (
                     <tr
                       key={toIdString(patient._id)}
-                      className="hover:bg-blue-50"
+                      className="hover:bg-blue-50 transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -366,15 +434,17 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => handleEditPatient(patient)}
-                          className="text-blue-500 hover:text-blue-700 mr-3"
+                          className="text-blue-500 hover:text-blue-700 mr-3 transition-colors"
                           aria-label="Edit patient"
+                          disabled={patientsState.loading === "pending"}
                         >
                           ✏️
                         </button>
                         <button
                           onClick={() => handleDeletePatient(patient)}
-                          className="text-red-500 hover:text-red-700"
+                          className="text-red-500 hover:text-red-700 transition-colors"
                           aria-label="Delete patient"
+                          disabled={patientsState.loading === "pending"}
                         >
                           🗑️
                         </button>
@@ -388,7 +458,7 @@ export default function AdminDashboard() {
               {patientsState.loading === "pending" && (
                 <div className="text-center py-8 text-blue-400">
                   <div className="text-3xl mb-2 animate-pulse">⏳</div>
-                  <p>Loading patients...</p>
+                  <p>กำลังโหลดข้อมูลผู้ป่วย...</p>
                 </div>
               )}
 
@@ -396,29 +466,35 @@ export default function AdminDashboard() {
               {patientsState.loading === "failed" && (
                 <div className="text-center py-8 text-red-500">
                   <div className="text-3xl mb-2">⚠️</div>
-                  <p>Error loading patients: {patientsState.error}</p>
+                  <p>เกิดข้อผิดพลาดในการโหลดข้อมูล: {patientsState.error}</p>
                   <button
                     onClick={() =>
                       selectedClinic &&
-                      dispatch(fetchPatients(toIdString(selectedClinic._id)))
+                      dispatch(fetchPatientsWithPagination({ 
+                        clinicId: toIdString(selectedClinic._id) 
+                      }))
                     }
-                    className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                    className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
                   >
-                    Retry
+                    ลองใหม่
                   </button>
                 </div>
               )}
 
               {/* Empty state - no patients for clinic */}
               {patientsState.loading === "succeeded" &&
-                patientsState.items.length === 0 &&
+                pagination?.totalItems === 0 &&
+                !searchTerm &&
                 selectedClinic && (
                   <div className="text-center py-8 text-blue-500">
-                    <div className="text-3xl mb-2">📋</div>
-                    <p>ปัจจุบันไม่มีเวชระเบียนในคลินิกนี้</p>
+                    <div className="text-5xl mb-3">📋</div>
+                    <h3 className="text-xl font-medium mb-2">ไม่มีเวชระเบียน</h3>
+                    <p className="text-blue-400 mb-4">
+                      ปัจจุบันไม่มีเวชระเบียนในคลินิกนี้
+                    </p>
                     <button
                       onClick={handleAddPatient}
-                      className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                      className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors"
                     >
                       เพิ่มผู้ป่วยคนแรก
                     </button>
@@ -427,37 +503,41 @@ export default function AdminDashboard() {
 
               {/* No search results */}
               {patientsState.loading === "succeeded" &&
-                patientsState.items.length > 0 &&
-                filteredPatients.length === 0 && (
+                pagination?.totalItems === 0 &&
+                searchTerm && (
                   <div className="text-center py-8 text-blue-400">
-                    <div className="text-3xl mb-2">🔍</div>
-                    <p>ไม่พบผู้ป่วยที่ตรงตามเกณฑ์การค้นหาของคุณ</p>
+                    <div className="text-5xl mb-3">🔍</div>
+                    <h3 className="text-xl font-medium mb-2">ไม่พบผลการค้นหา</h3>
+                    <p className="text-blue-400">
+                      ไม่พบผู้ป่วยที่ตรงกับ "{searchTerm}"
+                    </p>
+                    <button
+                      onClick={() => setSearchTerm("")}
+                      className="mt-3 text-blue-500 hover:text-blue-700 underline"
+                    >
+                      ล้างการค้นหา
+                    </button>
                   </div>
                 )}
             </div>
 
-            {/* Pagination - only show if there are patients */}
-            {filteredPatients.length > 0 && (
-              <div className="mt-6 flex items-center justify-between">
-                <div className="text-sm text-blue-600">
-                  แสดง{" "}
-                  <span className="font-medium">{filteredPatients.length}</span>{" "}
-                  จากทั้งหมด{" "}
-                  <span className="font-medium">{patientsCount}</span> รายการ
-                </div>
-
-                <div className="flex space-x-2">
-                  <button className="px-3 py-1 border border-blue-200 rounded text-blue-600 hover:bg-blue-50">
-                    หน้าก่อน
-                  </button>
-                  <button className="px-3 py-1 bg-blue-100 border border-blue-200 rounded text-blue-800">
-                    1
-                  </button>
-                  <button className="px-3 py-1 border border-blue-200 rounded text-blue-600 hover:bg-blue-50">
-                    หน้าถัดไป
-                  </button>
-                </div>
-              </div>
+            {/* Pagination Component */}
+            {pagination && pagination.totalPages > 1 && (
+              <Pagination
+                currentPage={pagination.currentPage}
+                totalPages={pagination.totalPages}
+                onPageChange={handlePageChange}
+                showInfo={false} // We're showing custom info above
+                showPageSizes={false} // We're showing page size selector above
+                totalItems={pagination.totalItems}
+                startIndex={(pagination.currentPage - 1) * pagination.itemsPerPage}
+                endIndex={Math.min(
+                  pagination.currentPage * pagination.itemsPerPage, 
+                  pagination.totalItems
+                )}
+                disabled={patientsState.loading === "pending"}
+                siblingCount={1}
+              />
             )}
           </div>
         </div>
