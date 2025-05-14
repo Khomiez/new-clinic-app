@@ -350,8 +350,8 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Page Size Selector and Info */}
-            {pagination && pagination.totalItems > 0 && (
+{/* Page Size Selector and Info */}
+{pagination && pagination.totalItems > 0 && (
               <div className="mb-4 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-blue-600">
@@ -457,7 +457,7 @@ export default function AdminDashboard() {
               {/* Loading state */}
               {patientsState.loading === "pending" && (
                 <div className="text-center py-8 text-blue-400">
-                  <div className="text-3xl mb-2 animate-pulse">⏳</div>
+                  <div className="text-3xl mb-2 animate-spin">⏳</div>
                   <p>กำลังโหลดข้อมูลผู้ป่วย...</p>
                 </div>
               )}
@@ -512,7 +512,7 @@ export default function AdminDashboard() {
                       ไม่พบผู้ป่วยที่ตรงกับ "{searchTerm}"
                     </p>
                     <button
-                      onClick={() => setSearchTerm("")}
+                      onClick={handleClearSearch}
                       className="mt-3 text-blue-500 hover:text-blue-700 underline"
                     >
                       ล้างการค้นหา
