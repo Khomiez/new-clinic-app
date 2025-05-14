@@ -1,4 +1,4 @@
-// src/components/ui/MedicalHistorySection.tsx - Complete enhanced version with better rollback handling
+// src/components/ui/MedicalHistorySection.tsx - Fixed empty state visibility issue
 import React, { useState, useEffect } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import HistoryRecord from "./HistoryRecord";
@@ -464,6 +464,10 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
 
       {/* Records List */}
       <div className="space-y-5">
+        {/* 
+          FIXED: Only show empty state when there are NO records AND we're NOT adding a record 
+          This prevents the "Add First Record" button from appearing below the add form
+        */}
         {historyRecords && historyRecords.length > 0 ? (
           historyRecords.map((record, index) => {
             const isMarkedForDeletion = isRecordMarkedForDeletion(index);
@@ -503,7 +507,8 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
               </div>
             );
           })
-        ) : (
+        ) : !isAddingRecord ? (
+          // Only show the empty state when we're not adding a record
           <div className="text-center py-10 bg-blue-50 rounded-xl">
             <div className="text-5xl mb-3">📋</div>
             <p className="text-blue-700 mb-2">No Medical Records Found</p>
@@ -515,7 +520,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
               Add First Record
             </button>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Information Note */}
