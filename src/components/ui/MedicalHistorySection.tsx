@@ -161,10 +161,10 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
     
     setShowDeleteConfirmation({
       show: true,
-      title: "Cancel Record",
+      title: "ยกเลิกบันทึก",
       message: currentRecordOperations.length > 0 
-        ? `Are you sure you want to cancel? ${currentRecordOperations.length} pending file operation(s) will be reverted.`
-        : "Are you sure you want to cancel? This will discard the current record.",
+        ? `คุณแน่ใจหรือไม่ว่าคุณต้องการยกเลิก? ${currentRecordOperations.length} การดำเนินการไฟล์ที่รอดำเนินการจะถูกย้อนกลับ`
+        : "คุณแน่ใจหรือไม่ว่าคุณต้องการยกเลิก? การกระทำนี้จะทำให้บันทึกปัจจุบันถูกยกเลิก",
       onConfirm: async () => {
         try {
           // Important: Rollback ALL pending operations for this session
@@ -311,14 +311,14 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
           onClick={() => setIsAddingRecord(true)}
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center gap-1"
         >
-          <span>+</span> Add Record
+          <span>+</span> เพิ่มประวัติ
         </button>
       </div>
 
       {/* Add New Record Form */}
       {isAddingRecord && (
         <div className="mb-6 bg-blue-50 p-5 rounded-xl border border-blue-100">
-          <h3 className="text-lg font-medium text-blue-700 mb-4">Add New Medical Record</h3>
+          <h3 className="text-lg font-medium text-blue-700 mb-4">เพิ่มเวชระเบียนใหม่</h3>
           
           <div className="space-y-4">
             {/* Date and Time */}
@@ -327,7 +327,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 className="block text-sm font-medium text-blue-700 mb-1"
                 htmlFor="timestamp"
               >
-                Date and Time <span className="text-red-500">*</span>
+                วันที่และเวลา<span className="text-red-500">*</span>
               </label>
               <input
                 type="datetime-local"
@@ -346,7 +346,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 className="block text-sm font-medium text-blue-700 mb-1"
                 htmlFor="notes"
               >
-                Notes
+                หมายเหตุ
               </label>
               <textarea
                 id="notes"
@@ -355,7 +355,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 onChange={handleRecordChange}
                 rows={4}
                 className="w-full px-3 py-2 border border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                placeholder="Enter notes about this visit..."
+                placeholder="กรอกหมายเหตุเกี่ยวกับการเข้ารับการรักษาครั้งนี้..."
               />
             </div>
 
@@ -409,7 +409,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
             {/* Document upload */}
             <div>
               <label className="block text-sm font-medium text-blue-700 mb-2">
-                Add Documents
+              เพิ่มเอกสาร
               </label>
               
               {isAddingDocument ? (
@@ -428,7 +428,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                   }`}
                   disabled={!clinicId}
                 >
-                  <span>📎</span> Attach Document
+                  <span>📎</span> แนบเอกสาร
                 </button>
               )}
               
@@ -447,7 +447,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 className="px-4 py-2 border border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 transition"
                 disabled={isProcessing}
               >
-                Cancel
+                ยกเลิก
               </button>
               <button
                 type="button"
@@ -455,7 +455,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
                 disabled={isProcessing}
               >
-                {isProcessing ? 'Processing...' : 'Add to History'}
+                {isProcessing ? 'Processing...' : 'เพิ่มประวัติ'}
               </button>
             </div>
           </div>
@@ -511,39 +511,19 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
           // Only show the empty state when we're not adding a record
           <div className="text-center py-10 bg-blue-50 rounded-xl">
             <div className="text-5xl mb-3">📋</div>
-            <p className="text-blue-700 mb-2">No Medical Records Found</p>
-            <p className="text-blue-500 mb-4">Add a new record to start tracking this patient's medical history</p>
+            <p className="text-blue-700 mb-2">ไม่พบข้อมูลเวชระเบียน</p>
+            <p className="text-blue-500 mb-4">เพิ่มระเบียนใหม่เพื่อเริ่มติดตามประวัติผู้ป่วย</p>
             <button
               onClick={() => setIsAddingRecord(true)}
               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
             >
-              Add First Record
+              เพิ่มประวัติแรก
             </button>
           </div>
         ) : null}
       </div>
 
-      {/* Information Note */}
-      <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-        <p className="text-blue-700 text-sm">
-          <span className="font-bold">Note:</span> Changes to medical history will be saved 
-          when you click the "Save Changes" button at the top of the page.
-        </p>
-        {pendingOperations.length > 0 && (
-          <div className="mt-2 text-xs text-orange-700">
-            <strong>Pending changes:</strong>
-            <ul className="mt-1 ml-4 list-disc">
-              {pendingOperations.map((op, idx) => (
-                <li key={idx}>
-                  {op.type === 'add' && `New document added${op.addedInSession ? ' (in this session)' : ''}`}
-                  {op.type === 'remove' && `Document marked for deletion${op.addedInSession ? ' (was added in this session)' : ''}`}
-                  {op.type === 'remove_record' && 'Record marked for deletion'}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+      
     </div>
   );
 };

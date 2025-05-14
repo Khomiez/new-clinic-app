@@ -54,9 +54,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
   
   return (
     <div className="p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-      <h3 className="text-md font-medium text-blue-700 mb-3">
-        Add Document
-      </h3>
       
       <FileUploader
         clinicId={clinicId}
@@ -78,7 +75,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
           onClick={onCancel}
           className="px-4 py-2 text-blue-600 hover:text-blue-800 transition"
         >
-          Cancel
+          ยกเลิก
         </button>
       </div>
     </div>
