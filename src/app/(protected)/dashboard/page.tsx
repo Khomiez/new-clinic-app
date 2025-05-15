@@ -1,7 +1,7 @@
-// src/app/(protected)/dashboard/page.tsx - Final version with server-side pagination
+// src/app/(protected)/dashboard/page.tsx - Complete dashboard with fixed search
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Sidebar,
@@ -28,12 +28,81 @@ import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { setSelectedClinic } from "@/redux/features/settings/settingsSlice";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
+import React from "react";
 
 // Format date for display
 const formatDate = (date: Date | string | undefined): string => {
   if (!date) return "N/A";
-  return new Date(date).toLocaleDateString("th-TH");
+  return new Date(date).toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 };
+
+// PatientRow component to prevent unnecessary re-renders
+const PatientRow = React.memo(({
+  patient,
+  onEdit,
+  onDelete,
+  isLoading
+}: {
+  patient: IPatient;
+  onEdit: (patient: IPatient) => void;
+  onDelete: (patient: IPatient) => void;
+  isLoading: boolean;
+}) => (
+  <tr
+    key={toIdString(patient._id)}
+    className="hover:bg-blue-50 transition-colors"
+  >
+    <td className="px-6 py-4 whitespace-nowrap">
+      <div className="flex items-center">
+        <div className="text-sm font-medium text-gray-900">
+          {patient.name}
+        </div>
+      </div>
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap">
+      <div className="text-sm text-gray-900 font-mono">
+        {patient.HN_code}
+      </div>
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap">
+      <div className="text-sm text-gray-900">
+        {patient.ID_code || "N/A"}
+      </div>
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500">
+      {formatDate(patient.lastVisit || patient.createdAt)}
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500">
+      {formatDate(patient.updatedAt)}
+    </td>
+    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+      <button
+        onClick={() => onEdit(patient)}
+        className="text-blue-500 hover:text-blue-700 mr-3 transition-colors p-1 rounded hover:bg-blue-100"
+        aria-label="Edit patient"
+        disabled={isLoading}
+        title="แก้ไขข้อมูลผู้ป่วย"
+      >
+        ✏️
+      </button>
+      <button
+        onClick={() => onDelete(patient)}
+        className="text-red-500 hover:text-red-700 transition-colors p-1 rounded hover:bg-red-100"
+        aria-label="Delete patient"
+        disabled={isLoading}
+        title="ลบข้อมูลผู้ป่วย"
+      >
+        🗑️
+      </button>
+    </td>
+  </tr>
+));
+
+PatientRow.displayName = 'PatientRow';
 
 export default function AdminDashboard() {
   // Redux state
@@ -57,12 +126,18 @@ export default function AdminDashboard() {
     isOpen: boolean;
     patient: IPatient | null;
   }>({ isOpen: false, patient: null });
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Search focus management refs
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const isTypingRef = useRef<boolean>(false);
+  const lastSearchTermRef = useRef<string>("");
 
   // Auth context
   const { isAuthenticated, logout, loading } = useAuth();
   const router = useRouter();
 
-  // Debounced search function
+  // Enhanced debounced search function with focus preservation
   const debouncedSearch = useCallback(
     (term: string, clinicId: string) => {
       if (searchTimeout) {
@@ -70,7 +145,12 @@ export default function AdminDashboard() {
       }
 
       const timeout = setTimeout(() => {
-        dispatch(searchPatients({ clinicId, search: term }));
+        // Only search if the term actually changed
+        if (term !== lastSearchTermRef.current) {
+          lastSearchTermRef.current = term;
+          isTypingRef.current = false;
+          dispatch(searchPatients({ clinicId, search: term, page: 1 }));
+        }
       }, 500); // 500ms delay
 
       setSearchTimeout(timeout);
@@ -87,66 +167,99 @@ export default function AdminDashboard() {
     };
   }, [searchTimeout]);
 
+  // Focus restoration effect
+  useEffect(() => {
+    if (
+      isTypingRef.current && 
+      searchInputRef.current && 
+      document.activeElement !== searchInputRef.current
+    ) {
+      // Use RAF to ensure DOM updates are complete
+      requestAnimationFrame(() => {
+        if (searchInputRef.current && isTypingRef.current) {
+          const currentValue = searchInputRef.current.value;
+          searchInputRef.current.focus();
+          // Restore cursor position to end
+          searchInputRef.current.setSelectionRange(currentValue.length, currentValue.length);
+        }
+      });
+    }
+  }, [patientsState.loading, patientsState.items]);
+
   // First, fetch admin data when component mounts
   useEffect(() => {
-    dispatch(fetchAdminData());
-  }, [dispatch]);
+    if (isAuthenticated && !adminInfo.id) {
+      dispatch(fetchAdminData());
+    }
+  }, [dispatch, isAuthenticated, adminInfo.id]);
 
   // Then, fetch clinics when admin data is available
   useEffect(() => {
-    if (adminInfo.id && adminInfo.loading === "succeeded") {
+    if (adminInfo.id && adminInfo.loading === "succeeded" && clinicsState.loading === "idle") {
       dispatch(fetchClinics(adminInfo.id));
     }
-  }, [adminInfo.loading, adminInfo.id, dispatch]);
+  }, [adminInfo.loading, adminInfo.id, dispatch, clinicsState.loading]);
 
   // Set the selected clinic and fetch patients
   useEffect(() => {
     if (
       clinicsState.loading === "succeeded" &&
       Array.isArray(clinicsState.items) &&
-      clinicsState.items.length > 0
+      clinicsState.items.length > 0 &&
+      isInitialLoad
     ) {
+      let clinicToSelect: IClinic | undefined;
+
       // If we have a saved clinic ID in Redux, try to use that first
       if (selectedClinicId) {
-        const savedClinic = clinicsState.items.find(
+        clinicToSelect = clinicsState.items.find(
           (c) => toIdString(c._id) === selectedClinicId
         );
-
-        if (savedClinic) {
-          setSelectedClinicState(savedClinic);
-          dispatch(fetchPatientsWithPagination({ clinicId: selectedClinicId }));
-          return;
-        }
       }
 
       // Fallback to first clinic if no saved clinic or saved clinic not found
-      if (!selectedClinic) {
-        setSelectedClinicState(clinicsState.items[0]);
-        const firstClinicId = toIdString(clinicsState.items[0]._id);
-        dispatch(setSelectedClinic(firstClinicId));
-        dispatch(fetchPatientsWithPagination({ clinicId: firstClinicId }));
+      if (!clinicToSelect) {
+        clinicToSelect = clinicsState.items[0];
+      }
+
+      if (clinicToSelect) {
+        setSelectedClinicState(clinicToSelect);
+        const clinicId = toIdString(clinicToSelect._id);
+        dispatch(setSelectedClinic(clinicId));
+        dispatch(fetchPatientsWithPagination({ clinicId }));
+        setIsInitialLoad(false);
       }
     }
   }, [
     clinicsState.loading,
     clinicsState.items,
-    selectedClinic,
     selectedClinicId,
     dispatch,
+    isInitialLoad,
   ]);
 
   // Handle search input change
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
+    
+    // Mark that user is actively typing
+    isTypingRef.current = true;
     setSearchTerm(value);
 
     if (selectedClinic) {
       debouncedSearch(value, toIdString(selectedClinic._id));
     }
-  };
+  }, [selectedClinic, debouncedSearch]);
 
-  const handleClearSearch = () => {
+  const handleClearSearch = useCallback(() => {
+    isTypingRef.current = false;
     setSearchTerm("");
+    lastSearchTermRef.current = "";
+    
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
     if (selectedClinic) {
       // Fetch all patients (without search)
       dispatch(
@@ -155,17 +268,22 @@ export default function AdminDashboard() {
         })
       );
     }
-  };
+    
+    // Maintain focus on the search input
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 0);
+  }, [selectedClinic, dispatch, searchTimeout]);
 
-  const handleAddPatient = (): void => {
+  const handleAddPatient = useCallback((): void => {
     if (selectedClinic) {
       router.push(`/patients/add?clinicId=${toIdString(selectedClinic._id)}`);
     } else {
-      alert("Please select a clinic first");
+      alert("กรุณาเลือกคลินิกก่อน");
     }
-  };
+  }, [selectedClinic, router]);
 
-  const handleEditPatient = (patient: IPatient): void => {
+  const handleEditPatient = useCallback((patient: IPatient): void => {
     if (selectedClinic) {
       router.push(
         `/patients/edit/${toIdString(patient._id)}?clinicId=${toIdString(
@@ -173,13 +291,13 @@ export default function AdminDashboard() {
         )}`
       );
     }
-  };
+  }, [selectedClinic, router]);
 
-  const handleDeletePatient = (patient: IPatient): void => {
+  const handleDeletePatient = useCallback((patient: IPatient): void => {
     setDeleteDialog({ isOpen: true, patient });
-  };
+  }, []);
 
-  const confirmDeletePatient = async (forceDelete: boolean): Promise<void> => {
+  const confirmDeletePatient = useCallback(async (forceDelete: boolean): Promise<void> => {
     if (!deleteDialog.patient || !selectedClinic) {
       return;
     }
@@ -197,36 +315,57 @@ export default function AdminDashboard() {
 
       // Refetch current page to update the list
       const currentPage = patientsState.pagination?.currentPage || 1;
-      dispatch(
-        changePage({
-          clinicId: toIdString(selectedClinic._id),
-          page: currentPage,
-        })
-      );
+      const currentSearch = patientsState.currentSearch || "";
+      
+      if (currentSearch) {
+        dispatch(
+          searchPatients({
+            clinicId: toIdString(selectedClinic._id),
+            search: currentSearch,
+            page: currentPage,
+          })
+        );
+      } else {
+        dispatch(
+          changePage({
+            clinicId: toIdString(selectedClinic._id),
+            page: currentPage,
+          })
+        );
+      }
     } catch (error: any) {
       // Error is thrown back to the dialog component
       throw error;
     }
-  };
+  }, [deleteDialog.patient, selectedClinic, dispatch, patientsState.pagination, patientsState.currentSearch]);
 
-  const handleClinicChange = (clinicId: string): void => {
+  const handleClinicChange = useCallback((clinicId: string): void => {
     if (!clinicId) return;
+
+    // Clear existing search and timeout
+    setSearchTerm("");
+    lastSearchTermRef.current = "";
+    isTypingRef.current = false;
+    
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
 
     // Clear patients when changing clinic
     dispatch(clearPatients());
-    setSearchTerm(""); // Reset search term
 
     const clinic = clinicsState.items.find(
       (c) => toIdString(c._id) === clinicId
     );
+    
     if (clinic) {
       setSelectedClinicState(clinic);
       dispatch(setSelectedClinic(clinicId));
       dispatch(fetchPatientsWithPagination({ clinicId }));
     }
-  };
+  }, [clinicsState.items, dispatch, searchTimeout]);
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = useCallback((page: number) => {
     if (selectedClinic) {
       dispatch(
         changePage({
@@ -235,9 +374,9 @@ export default function AdminDashboard() {
         })
       );
     }
-  };
+  }, [selectedClinic, dispatch]);
 
-  const handlePageSizeChange = (newSize: number) => {
+  const handlePageSizeChange = useCallback((newSize: number) => {
     if (selectedClinic) {
       dispatch(
         changePageSize({
@@ -246,10 +385,10 @@ export default function AdminDashboard() {
         })
       );
     }
-  };
+  }, [selectedClinic, dispatch]);
 
   // Show loading screen
-  if (loading || adminInfo.loading === "pending") {
+  if (loading || adminInfo.loading === "pending" || isInitialLoad) {
     return <LoadingScreen pageName="Dashboard" />;
   }
 
@@ -264,9 +403,21 @@ export default function AdminDashboard() {
     );
   }
 
+  // Show error if clinics failed to load
+  if (clinicsState.loading === "failed") {
+    return (
+      <ErrorScreen
+        title="Clinics Data Error"
+        error={clinicsState.error || "Failed to load clinics data"}
+        retry={() => adminInfo.id && dispatch(fetchClinics(adminInfo.id))}
+      />
+    );
+  }
+
   // Get pagination info
   const pagination = patientsState.pagination;
   const currentItems = patientsState.items || [];
+  const isLoading = patientsState.loading === "pending";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
@@ -297,55 +448,55 @@ export default function AdminDashboard() {
         />
 
         {/* Main Content */}
-        <div className="flex-grow p-8">
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-blue-800 mb-2">
+        <div className="flex-grow p-4 sm:p-6 lg:p-8">
+          <div className="mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl font-bold text-blue-800 mb-2">
               จัดการผู้ป่วย
             </h2>
-            <p className="text-blue-400">จัดการผู้ป่วยและเวชระเบียนของคุณ</p>
+            <p className="text-blue-400 text-sm sm:text-base">
+              จัดการผู้ป่วยและเวชระเบียนของคุณ
+            </p>
             {selectedClinic && (
-              <p className="text-blue-500 mt-2">
+              <p className="text-blue-500 mt-2 text-sm sm:text-base">
                 คลินิกปัจจุบัน: <strong>{selectedClinic.name}</strong>
               </p>
             )}
           </div>
 
           {/* Dashboard Summary Cards */}
-          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
             <Card
               cardTopic="ผู้ป่วยทั้งหมด"
               cardEmoji="👥"
               cardValue={pagination?.totalItems || 0}
-              cardDescription1="↑ 2 คน "
-              cardDescription2="จากเดือนที่แล้ว"
+              cardDescription1=""
+              cardDescription2="รายการทั้งหมดในระบบ"
             />
             <Card
-              cardTopic="ยอดผู้ป่วยวันนี้"
-              cardEmoji="✅"
-              cardValue={10}
-              cardDescription1="↑ 5 คน "
-              cardDescription2="จากเมื่อวาน"
+              cardTopic="หน้าปัจจุบัน"
+              cardEmoji="📄"
+              cardValue={pagination?.currentPage || 1}
+              cardDescription1={`จาก ${pagination?.totalPages || 1} หน้า`}
+              cardDescription2=""
             />
             <Card
               cardTopic="รายการในหน้านี้"
               cardEmoji="📝"
               cardValue={currentItems.length}
-              cardDescription1="📄 "
-              cardDescription2={`หน้า ${pagination?.currentPage || 1} จาก ${
-                pagination?.totalPages || 1
-              }`}
+              cardDescription1={`จาก ${pagination?.itemsPerPage || 10} รายการต่อหน้า`}
+              cardDescription2=""
             />
-          </div> */}
+          </div>
 
           {/* Patient List Section */}
-          <div className="bg-white p-6 rounded-xl shadow-md border border-blue-100">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold text-blue-800">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-blue-100">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
+              <h3 className="text-xl sm:text-2xl font-bold text-blue-800">
                 เวชระเบียนผู้ป่วย
               </h3>
               <button
                 onClick={handleAddPatient}
-                className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors"
+                className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={!selectedClinic}
               >
                 <span className="mr-2">➕</span>
@@ -353,43 +504,79 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Search Bar */}
+            {/* Search Bar with Enhanced Focus Management */}
             <div className="mb-6">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <span className="text-blue-400">🔍</span>
                 </div>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="ค้นหาด้วย ชื่อ-สกุล, HN code, หรือ รหัสประชาชน..."
                   value={searchTerm}
                   onChange={handleSearchChange}
-                  className="block w-full pl-10 pr-3 py-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 focus:outline-none"
-                  disabled={
-                    !selectedClinic || patientsState.loading === "pending"
-                  }
+                  onFocus={() => {
+                    isTypingRef.current = true;
+                  }}
+                  onBlur={(e) => {
+                    // Small delay to prevent focus loss during quick clicks
+                    setTimeout(() => {
+                      // Only set to false if focus hasn't returned
+                      if (document.activeElement !== searchInputRef.current) {
+                        isTypingRef.current = false;
+                      }
+                    }, 100);
+                  }}
+                  className="block w-full pl-10 pr-10 py-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 focus:outline-none transition-colors"
+                  disabled={!selectedClinic || isLoading}
+                  // Prevent React from recreating the element
+                  key={`search-${selectedClinic?._id || 'none'}`}
                 />
+                {/* Clear button */}
+                {searchTerm && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center hover:bg-blue-100 rounded-r-lg transition-colors"
+                    type="button"
+                    disabled={isLoading}
+                  >
+                    <span className="text-blue-400 hover:text-blue-600 cursor-pointer">
+                      ❌
+                    </span>
+                  </button>
+                )}
               </div>
+              
+              {/* Search results info */}
               {searchTerm && (
-                <p className="text-sm text-blue-600 mt-2">
-                  ค้นหา: "{searchTerm}" - พบ {pagination?.totalItems || 0}{" "}
-                  รายการ
-                </p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-3 gap-2">
+                  <p className="text-sm text-blue-600">
+                    ค้นหา: "<span className="font-medium">{searchTerm}</span>" 
+                    {pagination && (
+                      <span> - พบ <span className="font-medium">{pagination.totalItems}</span> รายการ</span>
+                    )}
+                  </p>
+                  {isLoading && (
+                    <span className="text-xs text-blue-400 flex items-center">
+                      <span className="animate-spin mr-1">⏳</span>
+                      กำลังค้นหา...
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
             {/* Page Size Selector and Info */}
             {pagination && pagination.totalItems > 0 && (
-              <div className="mb-4 flex justify-between items-center">
+              <div className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-blue-600">แสดงผลต่อหน้า:</span>
                   <select
                     value={pagination.itemsPerPage}
-                    onChange={(e) =>
-                      handlePageSizeChange(Number(e.target.value))
-                    }
-                    className="px-3 py-1 border border-blue-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    disabled={patientsState.loading === "pending"}
+                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                    className="px-3 py-1 border border-blue-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+                    disabled={isLoading}
                   >
                     <option value={5}>5 รายการ</option>
                     <option value={10}>10 รายการ</option>
@@ -399,34 +586,36 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="text-sm text-blue-600">
-                  หน้า {pagination.currentPage} จาก {pagination.totalPages} (
-                  {pagination.totalItems} รายการทั้งหมด)
+                  หน้า <span className="font-medium">{pagination.currentPage}</span> จาก{" "}
+                  <span className="font-medium">{pagination.totalPages}</span> 
+                  {" "}({" "}
+                  <span className="font-medium">{pagination.totalItems}</span> รายการทั้งหมด)
                 </div>
               </div>
             )}
 
-            {/* Patients Table */}
+            {/* Patients Table - Responsive */}
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-blue-100">
                 <thead>
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
                       ชื่อ-สกุล
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
                       HN CODE
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
                       รหัสประชาชน
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
                       เข้ารับบริการล่าสุด
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="hidden xl:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
                       แก้ไขล่าสุด
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-blue-400 uppercase tracking-wider">
-                      จัดการ (แก้ไข/ลบ)
+                    <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-blue-400 uppercase tracking-wider">
+                      จัดการ
                     </th>
                   </tr>
                 </thead>
@@ -436,46 +625,52 @@ export default function AdminDashboard() {
                       key={toIdString(patient._id)}
                       className="hover:bg-blue-50 transition-colors"
                     >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="text-sm font-medium text-gray-900">
-                            {patient.name}
-                          </div>
+                      <td className="px-3 sm:px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                          {patient.name}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 font-mono">
                           {patient.HN_code}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {patient.ID_code || "N/A"}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500">
-                        {formatDate(patient.lastVisit || patient.createdAt)}
+                      <td className="hidden lg:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {formatDate(patient.lastVisit || patient.createdAt)}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500">
-                        {formatDate(patient.updatedAt)}
+                      <td className="hidden xl:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {formatDate(patient.updatedAt)}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => handleEditPatient(patient)}
-                          className="text-blue-500 hover:text-blue-700 mr-3 transition-colors"
-                          aria-label="Edit patient"
-                          disabled={patientsState.loading === "pending"}
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDeletePatient(patient)}
-                          className="text-red-500 hover:text-red-700 transition-colors"
-                          aria-label="Delete patient"
-                          disabled={patientsState.loading === "pending"}
-                        >
-                          🗑️
-                        </button>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            onClick={() => handleEditPatient(patient)}
+                            className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-100 transition-colors disabled:opacity-50"
+                            aria-label="Edit patient"
+                            disabled={isLoading}
+                            title="แก้ไขข้อมูลผู้ป่วย"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDeletePatient(patient)}
+                            className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+                            aria-label="Delete patient"
+                            disabled={isLoading}
+                            title="ลบข้อมูลผู้ป่วย"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -483,7 +678,7 @@ export default function AdminDashboard() {
               </table>
 
               {/* Loading state */}
-              {patientsState.loading === "pending" && (
+              {isLoading && (
                 <div className="text-center py-8 text-blue-400">
                   <div className="text-3xl mb-2 animate-spin">⏳</div>
                   <p>กำลังโหลดข้อมูลผู้ป่วย...</p>
@@ -494,7 +689,7 @@ export default function AdminDashboard() {
               {patientsState.loading === "failed" && (
                 <div className="text-center py-8 text-red-500">
                   <div className="text-3xl mb-2">⚠️</div>
-                  <p>เกิดข้อผิดพลาดในการโหลดข้อมูล: {patientsState.error}</p>
+                  <p className="mb-4">เกิดข้อผิดพลาดในการโหลดข้อมูล: {patientsState.error}</p>
                   <button
                     onClick={() =>
                       selectedClinic &&
@@ -504,18 +699,31 @@ export default function AdminDashboard() {
                         })
                       )
                     }
-                    className="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
                   >
                     ลองใหม่
                   </button>
                 </div>
               )}
 
+              {/* No clinic selected */}
+              {!selectedClinic && (
+                <div className="text-center py-8 text-blue-500">
+                  <div className="text-5xl mb-3">🏥</div>
+                  <h3 className="text-xl font-medium mb-2">
+                    กรุณาเลือกคลินิก
+                  </h3>
+                  <p className="text-blue-400">
+                    กรุณาเลือกคลินิกจากแถบด้านข้างเพื่อดูรายการผู้ป่วย
+                  </p>
+                </div>
+              )}
+
               {/* Empty state - no patients for clinic */}
-              {patientsState.loading === "succeeded" &&
+              {selectedClinic &&
+                patientsState.loading === "succeeded" &&
                 pagination?.totalItems === 0 &&
-                !searchTerm &&
-                selectedClinic && (
+                !searchTerm && (
                   <div className="text-center py-8 text-blue-500">
                     <div className="text-5xl mb-3">📋</div>
                     <h3 className="text-xl font-medium mb-2">
@@ -534,7 +742,8 @@ export default function AdminDashboard() {
                 )}
 
               {/* No search results */}
-              {patientsState.loading === "succeeded" &&
+              {selectedClinic &&
+                patientsState.loading === "succeeded" &&
                 pagination?.totalItems === 0 &&
                 searchTerm && (
                   <div className="text-center py-8 text-blue-400">
@@ -542,12 +751,12 @@ export default function AdminDashboard() {
                     <h3 className="text-xl font-medium mb-2">
                       ไม่พบผลการค้นหา
                     </h3>
-                    <p className="text-blue-400">
-                      ไม่พบผู้ป่วยที่ตรงกับ "{searchTerm}"
+                    <p className="text-blue-400 mb-4">
+                      ไม่พบผู้ป่วยที่ตรงกับ "<span className="font-medium">{searchTerm}</span>"
                     </p>
                     <button
                       onClick={handleClearSearch}
-                      className="mt-3 text-blue-500 hover:text-blue-700 underline"
+                      className="text-blue-500 hover:text-blue-700 underline"
                     >
                       ล้างการค้นหา
                     </button>
@@ -571,13 +780,77 @@ export default function AdminDashboard() {
                   pagination.currentPage * pagination.itemsPerPage,
                   pagination.totalItems
                 )}
-                disabled={patientsState.loading === "pending"}
+                disabled={isLoading}
                 siblingCount={1}
               />
             )}
+          </div>
+
+          {/* Quick Stats Section */}
+          {selectedClinic && pagination && pagination.totalItems > 0 && (
+            <div className="mt-6 bg-white p-4 sm:p-6 rounded-xl shadow-md border border-blue-100">
+              <h3 className="text-lg font-bold text-blue-800 mb-4">สถิติคลินิก</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <div className="text-2xl text-blue-600 font-bold">
+                    {pagination.totalItems}
+                  </div>
+                  <div className="text-sm text-blue-500">ผู้ป่วยทั้งหมด</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-2xl text-green-600 font-bold">
+                    {Math.ceil(pagination.totalItems / pagination.totalPages)}
+                  </div>
+                  <div className="text-sm text-green-500">เฉลี่ยต่อหน้า</div>
+                </div>
+                <div className="text-center p-3 bg-purple-50 rounded-lg">
+                  <div className="text-2xl text-purple-600 font-bold">
+                    {pagination.totalPages}
+                  </div>
+                  <div className="text-sm text-purple-500">หน้าทั้งหมด</div>
+                </div>
+                <div className="text-center p-3 bg-orange-50 rounded-lg">
+                  <div className="text-2xl text-orange-600 font-bold">
+                    {selectedClinic.name.length > 10 
+                      ? `${selectedClinic.name.substring(0, 10)}...` 
+                      : selectedClinic.name}
+                  </div>
+                  <div className="text-sm text-orange-500">คลินิกปัจจุบัน</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Help Section */}
+          <div className="mt-6 bg-blue-50 p-4 sm:p-6 rounded-xl border border-blue-100">
+            <h3 className="text-lg font-bold text-blue-800 mb-3 flex items-center">
+              <span className="mr-2">💡</span>
+              วิธีใช้งาน
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-700">
+              <div>
+                <h4 className="font-medium mb-2">การค้นหา:</h4>
+                <ul className="space-y-1 text-blue-600">
+                  <li>• ค้นหาด้วยชื่อ-นามสกุล</li>
+                  <li>• ค้นหาด้วย HN Code</li>
+                  <li>• ค้นหาด้วยรหัสประชาชน</li>
+                  <li>• กดปุ่ม ❌ เพื่อล้างการค้นหา</li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">การจัดการ:</h4>
+                <ul className="space-y-1 text-blue-600">
+                  <li>• ✏️ แก้ไขข้อมูลผู้ป่วย</li>
+                  <li>• 🗑️ ลบข้อมูลผู้ป่วย</li>
+                  <li>• ➕ เพิ่มผู้ป่วยใหม่</li>
+                  <li>• เปลี่ยนคลินิกจากแถบด้านข้าง</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+                    
