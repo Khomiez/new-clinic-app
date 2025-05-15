@@ -1,4 +1,4 @@
-// src/app/api/clinic/[id]/files/route.ts
+// src/app/api/clinic/[id]/files/route.ts - Updated to use server-side Cloudinary imports
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFromCloudinary, extractPublicIdFromUrl, getClinicResources } from '@/utils/cloudinaryUploader';
 import { dbConnect } from '@/db';
@@ -12,6 +12,7 @@ interface FileResponse {
   format: string;
   resourceType: string;
   createdAt: string;
+  originalFilename?: string;
   context?: {
     [key: string]: string;
   };
@@ -54,7 +55,7 @@ export async function GET(
     }
 
     // Filter by patient ID if provided
-    let filteredResources = resourcesResult.resources;
+    let filteredResources = resourcesResult.resources || [];
     if (patientId) {
       filteredResources = filteredResources.filter(
         (resource) => resource.context?.patient_id === patientId
@@ -67,6 +68,7 @@ export async function GET(
       format: resource.format,
       resourceType: resource.resource_type,
       createdAt: resource.created_at,
+      originalFilename: resource.original_filename,
       context: resource.context,
       tags: resource.tags
     }));

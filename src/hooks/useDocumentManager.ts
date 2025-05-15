@@ -1,6 +1,5 @@
-// src/hooks/useDocumentManager.ts - Enhanced with better operation tracking
+// src/hooks/useDocumentManager.ts - Updated to avoid client-side Cloudinary imports
 import { useState, useCallback } from "react";
-import { extractPublicIdFromUrl } from "@/utils/cloudinaryUploader";
 
 export interface DocumentOperation {
   type: "add" | "remove" | "remove_record";
@@ -140,7 +139,7 @@ export const useDocumentManager = ({
     [pendingOperations]
   );
 
-  // Actually delete from Cloudinary (when saving)
+  // Actually delete from Cloudinary (when saving) - using API call
   const deleteFromCloudinary = useCallback(
     async (url: string) => {
       try {

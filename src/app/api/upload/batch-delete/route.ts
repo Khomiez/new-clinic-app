@@ -1,4 +1,4 @@
-// src/app/api/upload/batch-delete/route.ts
+// src/app/api/upload/batch-delete/route.ts - Updated to use server-side Cloudinary imports
 import { NextRequest, NextResponse } from "next/server";
 import {
   deleteFromCloudinary,
