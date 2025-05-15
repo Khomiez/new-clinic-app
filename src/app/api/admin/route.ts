@@ -1,4 +1,4 @@
-// src/app/api/admin/route.ts
+// src/app/api/admin/route.ts - Updated with automatic clinic relationship
 import { NextRequest, NextResponse } from "next/server";
 import { dbConnect } from "@/db";
 import { Admin, Clinic } from "@/models";
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// Create a new admin
+// Create a new admin with automatic clinic relationship establishment
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -58,6 +58,14 @@ export async function POST(request: NextRequest) {
         if (!body.username || !body.password) {
             return NextResponse.json(
                 { success: false, error: "Username and password are required" },
+                { status: 400 }
+            );
+        }
+
+        // Validate managedClinics if provided
+        if (body.managedClinics && !Array.isArray(body.managedClinics)) {
+            return NextResponse.json(
+                { success: false, error: "managedClinics must be an array of clinic IDs" },
                 { status: 400 }
             );
         }
@@ -73,15 +81,56 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Validate each clinic ID if managedClinics provided
+        const validatedClinics = [];
+        if (body.managedClinics && body.managedClinics.length > 0) {
+            for (const clinicId of body.managedClinics) {
+                // Validate ObjectId format
+                if (!isValidObjectId(clinicId)) {
+                    return NextResponse.json(
+                        { success: false, error: `Invalid clinic ID format: ${clinicId}` },
+                        { status: 400 }
+                    );
+                }
+
+                // Check if clinic exists
+                const clinic = await Clinic.findById(clinicId);
+                if (!clinic) {
+                    return NextResponse.json(
+                        { success: false, error: `Clinic not found: ${clinicId}` },
+                        { status: 404 }
+                    );
+                }
+
+                validatedClinics.push(clinic);
+            }
+        }
+
         // Create new admin
         const admin = await Admin.create(body);
         
-        // Don't return the password in the response
-        const adminResponse = admin.toObject();
-        delete adminResponse.password;
+        // Establish bidirectional relationship with clinics
+        if (validatedClinics.length > 0) {
+            for (const clinic of validatedClinics) {
+                // Add admin to clinic's managerId array (avoid duplicates)
+                await Clinic.findByIdAndUpdate(
+                    clinic._id,
+                    { $addToSet: { managerId: admin._id } }
+                );
+            }
+        }
+        
+        // Return admin without password, but populate managedClinics for confirmation
+        const createdAdmin = await Admin.findById(admin._id)
+            .populate("managedClinics")
+            .select("-password");
         
         return NextResponse.json(
-            { success: true, admin: adminResponse },
+            { 
+                success: true, 
+                admin: createdAdmin,
+                message: `Admin created successfully${validatedClinics.length > 0 ? ` and assigned to ${validatedClinics.length} clinic(s)` : ''}`
+            },
             { status: 201 }
         );
     } catch (error) {

@@ -311,7 +311,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Dashboard Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card
               cardTopic="ผู้ป่วยทั้งหมด"
               cardEmoji="👥"
@@ -335,7 +335,7 @@ export default function AdminDashboard() {
                 pagination?.totalPages || 1
               }`}
             />
-          </div>
+          </div> */}
 
           {/* Patient List Section */}
           <div className="bg-white p-6 rounded-xl shadow-md border border-blue-100">
