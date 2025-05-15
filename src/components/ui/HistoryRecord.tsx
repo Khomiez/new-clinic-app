@@ -1,8 +1,7 @@
-// src/components/ui/HistoryRecord.tsx - Complete updated component with PDF viewing
+// src/components/ui/HistoryRecord.tsx - Simplified with only Open and Delete actions
 import React, { useState } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import DocumentUpload from "./DocumentUpload";
-import PDFViewer from "./PDFViewer";
 import { toIdString } from "@/utils/mongoHelpers";
 import { DocumentOperation } from "@/hooks/useDocumentManager";
 import {
@@ -43,18 +42,6 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
   );
   const [notesValue, setNotesValue] = useState(record.notes || "");
   const [isAddingDocument, setIsAddingDocument] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  // PDF Viewer state
-  const [pdfViewer, setPdfViewer] = useState<{
-    isOpen: boolean;
-    url: string;
-    filename: string;
-  }>({
-    isOpen: false,
-    url: "",
-    filename: "",
-  });
 
   // Format the date nicely
   const formatDate = (dateString: string | Date): string => {
@@ -151,360 +138,225 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
     return fileInfo.filename;
   };
 
-  // Check if a file is a PDF
-  const isPDFFile = (url: string): boolean => {
-    const fileInfo = extractFileInfo(url);
-    return (
-      fileInfo.type === "application/pdf" ||
-      fileInfo.filename.toLowerCase().endsWith(".pdf") ||
-      url.toLowerCase().includes(".pdf")
-    );
-  };
-
-  // Check if a file is an image
-  const isImageFile = (url: string): boolean => {
-    const fileInfo = extractFileInfo(url);
-    return (
-      fileInfo.type?.startsWith("image/") ||
-      fileInfo.filename.match(/\.(jpg|jpeg|png|gif|webp)$/i) !== null
-    );
-  };
-
-  // Toggle image preview
-  const togglePreview = (url: string) => {
-    if (previewUrl === url) {
-      setPreviewUrl(null);
-    } else {
-      setPreviewUrl(url);
-    }
-  };
-
-  // Handle PDF viewing
-  const handlePDFView = (url: string) => {
-    const filename = getFilenameFromUrl(url);
-    setPdfViewer({
-      isOpen: true,
-      url,
-      filename,
-    });
-  };
-
-  // Close PDF viewer
-  const closePDFViewer = () => {
-    setPdfViewer({
-      isOpen: false,
-      url: "",
-      filename: "",
-    });
-  };
-
-  // Get file size if available (this would require storing metadata)
-  const getFileSize = (url: string): string | null => {
-    // Note: This would require storing file size metadata during upload
-    // For now, return null - could be enhanced with actual size data
-    return null;
-  };
-
   return (
-    <>
-      {/* PDF Viewer Modal */}
-      <PDFViewer
-        url={pdfViewer.url}
-        filename={pdfViewer.filename}
-        isOpen={pdfViewer.isOpen}
-        onClose={closePDFViewer}
-      />
-
-      <div className="bg-white rounded-xl p-4 border border-blue-100 mb-4 shadow-sm">
-        <div className="flex justify-between items-start mb-3">
-          <div className="flex-grow">
-            {isEditingDate ? (
-              <div className="flex items-center">
-                <input
-                  type="datetime-local"
-                  value={dateValue}
-                  onChange={handleDateChange}
-                  className="px-3 py-2 border border-blue-200 rounded-lg mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={handleDateSubmit}
-                  className="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setIsEditingDate(false)}
-                  className="px-3 py-1.5 ml-2 border border-blue-200 text-blue-500 rounded-lg hover:bg-blue-50 text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center">
-                <div className="flex items-center gap-1">
-                  <span className="text-blue-400">📅</span>
-                  <h3 className="font-medium text-blue-700">
-                    {formatDate(record.timestamp)}
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setIsEditingDate(true)}
-                  className="ml-2 text-blue-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50"
-                  title="Edit date"
-                >
-                  ✏️
-                </button>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => onRemove(index)}
-            className="text-red-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50"
-            title="Remove record"
-          >
-            ❌
-          </button>
-        </div>
-
-        {/* Notes Section */}
-        <div className="mb-4">
-          <div className="flex items-center mb-2">
-            <span className="text-blue-400 mr-1">📝</span>
-            <h4 className="font-medium text-blue-600">Notes</h4>
-            {!isEditingNotes && (
+    <div className="bg-white rounded-xl p-4 border border-blue-100 mb-4 shadow-sm">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex-grow">
+          {isEditingDate ? (
+            <div className="flex items-center">
+              <input
+                type="datetime-local"
+                value={dateValue}
+                onChange={handleDateChange}
+                className="px-3 py-2 border border-blue-200 rounded-lg mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
               <button
-                onClick={() => setIsEditingNotes(true)}
+                onClick={handleDateSubmit}
+                className="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setIsEditingDate(false)}
+                className="px-3 py-1.5 ml-2 border border-blue-200 text-blue-500 rounded-lg hover:bg-blue-50 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center">
+              <div className="flex items-center gap-1">
+                <span className="text-blue-400">📅</span>
+                <h3 className="font-medium text-blue-700">
+                  {formatDate(record.timestamp)}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsEditingDate(true)}
                 className="ml-2 text-blue-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50"
-                title="Edit notes"
+                title="Edit date"
               >
                 ✏️
               </button>
-            )}
-          </div>
-
-          {isEditingNotes ? (
-            <div>
-              <textarea
-                value={notesValue}
-                onChange={handleNotesChange}
-                className="w-full px-3 py-2 border border-blue-200 rounded-lg bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 min-h-[100px]"
-                placeholder="Enter notes about this visit..."
-              />
-              <div className="flex justify-end mt-2 space-x-2">
-                <button
-                  onClick={() => setIsEditingNotes(false)}
-                  className="px-3 py-1 text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleNotesSubmit}
-                  className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
-                >
-                  Save Notes
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-blue-50 p-3 rounded-lg">
-              {record.notes ? (
-                <p className="text-gray-700 whitespace-pre-wrap">
-                  {record.notes}
-                </p>
-              ) : (
-                <p className="text-gray-500 italic">No notes for this visit</p>
-              )}
             </div>
           )}
         </div>
+        <button
+          onClick={() => onRemove(index)}
+          className="text-red-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50"
+          title="Remove record"
+        >
+          ❌
+        </button>
+      </div>
 
-        {/* Documents Section */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center">
-              <span className="text-blue-400 mr-1">📁</span>
-              <h4 className="font-medium text-blue-600">Documents</h4>
-            </div>
+      {/* Notes Section */}
+      <div className="mb-4">
+        <div className="flex items-center mb-2">
+          <span className="text-blue-400 mr-1">📝</span>
+          <h4 className="font-medium text-blue-600">Notes</h4>
+          {!isEditingNotes && (
             <button
-              onClick={handleAddDocumentClick}
-              className="text-sm bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-200 flex items-center gap-1"
-              disabled={!clinicId}
+              onClick={() => setIsEditingNotes(true)}
+              className="ml-2 text-blue-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50"
+              title="Edit notes"
             >
-              <span>+</span> Add Document
+              ✏️
             </button>
-          </div>
-
-          {/* Document Upload Form */}
-          {isAddingDocument && clinicId && (
-            <div className="mb-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
-              <DocumentUpload
-                clinicId={clinicId}
-                patientId={patientId}
-                onAddDocument={handleUploadComplete}
-                onCancel={() => setIsAddingDocument(false)}
-              />
-            </div>
           )}
+        </div>
 
-          {/* Documents List */}
-          {record.document_urls && record.document_urls.length > 0 ? (
-            <div className="space-y-2">
-              {record.document_urls.map((url, docIndex) => {
-                const isPendingRemoval = isDocumentPendingRemoval(
-                  url,
-                  docIndex
-                );
-                const isPendingAdd = isDocumentPendingAdd(url);
-                const filename = getFilenameFromUrl(url);
-                const isImage = isImageFile(url);
-                const isPDF = isPDFFile(url);
-                const fileSize = getFileSize(url);
-                const fileInfo = extractFileInfo(url);
+        {isEditingNotes ? (
+          <div>
+            <textarea
+              value={notesValue}
+              onChange={handleNotesChange}
+              className="w-full px-3 py-2 border border-blue-200 rounded-lg bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 min-h-[100px]"
+              placeholder="Enter notes about this visit..."
+            />
+            <div className="flex justify-end mt-2 space-x-2">
+              <button
+                onClick={() => setIsEditingNotes(false)}
+                className="px-3 py-1 text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleNotesSubmit}
+                className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
+              >
+                Save Notes
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-blue-50 p-3 rounded-lg">
+            {record.notes ? (
+              <p className="text-gray-700 whitespace-pre-wrap">
+                {record.notes}
+              </p>
+            ) : (
+              <p className="text-gray-500 italic">No notes for this visit</p>
+            )}
+          </div>
+        )}
+      </div>
 
-                return (
-                  <div key={docIndex} className="relative">
-                    <div
-                      className={`flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors ${
-                        isPendingRemoval
-                          ? "opacity-50 bg-red-50 border-red-200"
-                          : ""
-                      } ${isPendingAdd ? "bg-green-50 border-green-200" : ""}`}
-                    >
-                      <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        <span className="text-xl">
-                          {getFileIcon(filename, url)}
+      {/* Documents Section */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center">
+            <span className="text-blue-400 mr-1">📁</span>
+            <h4 className="font-medium text-blue-600">Documents</h4>
+          </div>
+          <button
+            onClick={handleAddDocumentClick}
+            className="text-sm bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-200 flex items-center gap-1"
+            disabled={!clinicId}
+          >
+            <span>+</span> Add Document
+          </button>
+        </div>
+
+        {/* Document Upload Form */}
+        {isAddingDocument && clinicId && (
+          <div className="mb-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+            <DocumentUpload
+              clinicId={clinicId}
+              patientId={patientId}
+              onAddDocument={handleUploadComplete}
+              onCancel={() => setIsAddingDocument(false)}
+            />
+          </div>
+        )}
+
+        {/* Documents List - Simplified with only Open and Delete */}
+        {record.document_urls && record.document_urls.length > 0 ? (
+          <div className="space-y-2">
+            {record.document_urls.map((url, docIndex) => {
+              const isPendingRemoval = isDocumentPendingRemoval(
+                url,
+                docIndex
+              );
+              const isPendingAdd = isDocumentPendingAdd(url);
+              const filename = getFilenameFromUrl(url);
+
+              return (
+                <div key={docIndex} className="relative">
+                  <div
+                    className={`flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors ${
+                      isPendingRemoval
+                        ? "opacity-50 bg-red-50 border-red-200"
+                        : ""
+                    } ${isPendingAdd ? "bg-green-50 border-green-200" : ""}`}
+                  >
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                      <span className="text-xl">
+                        {getFileIcon(filename, url)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-gray-700 font-medium truncate block">
+                          {filename}
                         </span>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-gray-700 font-medium truncate block">
-                            {filename}
-                          </span>
-                          {fileSize && (
-                            <span className="text-xs text-gray-500">
-                              {fileSize}
-                            </span>
-                          )}
-                          {(isPendingRemoval || isPendingAdd) && (
-                            <div className="flex gap-2 mt-1">
-                              {isPendingRemoval && (
-                                <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
-                                  Will be deleted on save
-                                </span>
-                              )}
-                              {isPendingAdd && (
-                                <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded">
-                                  New - not saved yet
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-1">
-                        {/* PDF View Button */}
-                        {isPDF && (
-                          <button
-                            onClick={() => handlePDFView(url)}
-                            className="text-sm bg-purple-100 text-purple-600 px-3 py-1.5 rounded-lg hover:bg-purple-200 flex items-center gap-1"
-                            disabled={isPendingRemoval}
-                            title="View PDF in full screen"
-                          >
-                            <span>📖</span> View PDF
-                          </button>
+                        {(isPendingRemoval || isPendingAdd) && (
+                          <div className="flex gap-2 mt-1">
+                            {isPendingRemoval && (
+                              <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                                Will be deleted on save
+                              </span>
+                            )}
+                            {isPendingAdd && (
+                              <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded">
+                                New - not saved yet
+                              </span>
+                            )}
+                          </div>
                         )}
-
-                        {/* Image Preview Button */}
-                        {isImage && (
-                          <button
-                            onClick={() => togglePreview(url)}
-                            className="text-sm bg-green-100 text-green-600 px-2 py-1.5 rounded-lg hover:bg-green-200"
-                            disabled={isPendingRemoval}
-                            title="Preview image"
-                          >
-                            {previewUrl === url ? "Hide" : "Preview"}
-                          </button>
-                        )}
-
-                        {/* Open in New Tab */}
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm bg-blue-100 text-blue-600 px-2 py-1.5 rounded-lg hover:bg-blue-200"
-                          title="Open in new tab"
-                        >
-                          <span>🔗</span> Open
-                        </a>
-
-                        {/* Download Button */}
-                        <a
-                          href={url}
-                          download={filename}
-                          className="text-sm bg-gray-100 text-gray-600 px-2 py-1.5 rounded-lg hover:bg-gray-200"
-                          title="Download file"
-                        >
-                          <span>💾</span> Download
-                        </a>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={() =>
-                            handleRemoveDocumentClick(url, docIndex)
-                          }
-                          className="text-sm bg-red-100 text-red-600 px-2 py-1.5 rounded-lg hover:bg-red-200"
-                          disabled={isPendingRemoval}
-                          title="Delete file"
-                        >
-                          {isPendingRemoval ? (
-                            <span>🗑️ Marked</span>
-                          ) : (
-                            <span>🗑️ Delete</span>
-                          )}
-                        </button>
                       </div>
                     </div>
 
-                    {/* Image Preview */}
-                    {previewUrl === url && isImage && !isPendingRemoval && (
-                      <div className="mt-2 p-3 bg-gray-100 rounded-lg">
-                        <img
-                          src={url}
-                          alt={filename}
-                          className="max-w-full max-h-64 object-contain mx-auto border border-gray-300 rounded"
-                        />
-                        <div className="flex justify-center mt-3 gap-2">
-                          <button
-                            onClick={() => setPreviewUrl(null)}
-                            className="text-sm bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-300"
-                          >
-                            Close Preview
-                          </button>
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-200"
-                          >
-                            View Full Size
-                          </a>
-                        </div>
-                      </div>
-                    )}
+                    {/* Simplified Actions - Only Open and Delete */}
+                    <div className="flex items-center space-x-2">
+                      {/* Open in New Tab */}
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+                        title="Open file in new tab"
+                      >
+                        <span className="mr-1">🔗</span>
+                        Open
+                      </a>
+
+                      {/* Delete Button */}
+                      <button
+                        onClick={() =>
+                          handleRemoveDocumentClick(url, docIndex)
+                        }
+                        className="inline-flex items-center px-3 py-1.5 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                        disabled={isPendingRemoval}
+                        title="Delete file"
+                      >
+                        <span className="mr-1">🗑️</span>
+                        {isPendingRemoval ? "Marked" : "Delete"}
+                      </button>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bg-blue-50 p-3 rounded-lg text-center">
-              <p className="text-gray-500 italic">No documents attached</p>
-              <p className="text-sm text-blue-600 mt-1">
-                Click "Add Document" to attach files
-              </p>
-            </div>
-          )}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-blue-50 p-3 rounded-lg text-center">
+            <p className="text-gray-500 italic">No documents attached</p>
+            <p className="text-sm text-blue-600 mt-1">
+              Click "Add Document" to attach files
+            </p>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 };
 
