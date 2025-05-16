@@ -1,5 +1,4 @@
 export {default as Card} from './Card';
-export * from './DebugMedicalHistory';
 export {default as DocumentUpload} from './DocumentUpload';
 export {default as ErrorScreen} from './ErrorScreen';
 export {default as FileUploader} from './FileUploader';
