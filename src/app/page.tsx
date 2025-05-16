@@ -1,16 +1,27 @@
-import React from "react";
+// src/app/page.tsx
+"use client";
 
-type Props = {};
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
-const page = (props: Props) => {
-  return (
-    <div>
-      <div className="panel">
-        <h1 className="heading">🏥 Welcome to the Staff Portal</h1>
-        <button className="btn-primary">💊 Submit</button>
-      </div>
-    </div>
-  );
-};
+export default function HomePage() {
+  const { isAuthenticated, loading } = useAuth();
+  const router = useRouter();
 
-export default page;
+  useEffect(() => {
+    if (!loading) {
+      if (isAuthenticated) {
+        // If user is already authenticated, redirect to dashboard
+        router.replace("/dashboard");
+      } else {
+        // If user is not authenticated, redirect to login
+        router.replace("/login");
+      }
+    }
+  }, [isAuthenticated, loading, router]);
+
+  // Show loading screen while checking authentication
+  return <LoadingScreen pageName="Application" message="Redirecting..." />;
+}

@@ -1,4 +1,4 @@
-// src/app/(protected)/dashboard/page.tsx - Complete dashboard with fixed search
+// src/app/(protected)/dashboard/page.tsx - Updated with manual search button
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -119,72 +119,77 @@ export default function AdminDashboard() {
     IClinic | undefined
   >(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(
-    null
-  );
+  const [currentSearchTerm, setCurrentSearchTerm] = useState<string>(""); // Track what we're actually searching for
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     patient: IPatient | null;
   }>({ isOpen: false, patient: null });
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // Search focus management refs
+  // Search input ref for focus management
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const isTypingRef = useRef<boolean>(false);
-  const lastSearchTermRef = useRef<string>("");
 
   // Auth context
   const { isAuthenticated, logout, loading } = useAuth();
   const router = useRouter();
 
-  // Enhanced debounced search function with focus preservation
-  const debouncedSearch = useCallback(
-    (term: string, clinicId: string) => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-
-      const timeout = setTimeout(() => {
-        // Only search if the term actually changed
-        if (term !== lastSearchTermRef.current) {
-          lastSearchTermRef.current = term;
-          isTypingRef.current = false;
-          dispatch(searchPatients({ clinicId, search: term, page: 1 }));
-        }
-      }, 500); // 500ms delay
-
-      setSearchTimeout(timeout);
-    },
-    [dispatch, searchTimeout]
-  );
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-    };
-  }, [searchTimeout]);
-
-  // Focus restoration effect
-  useEffect(() => {
-    if (
-      isTypingRef.current && 
-      searchInputRef.current && 
-      document.activeElement !== searchInputRef.current
-    ) {
-      // Use RAF to ensure DOM updates are complete
-      requestAnimationFrame(() => {
-        if (searchInputRef.current && isTypingRef.current) {
-          const currentValue = searchInputRef.current.value;
-          searchInputRef.current.focus();
-          // Restore cursor position to end
-          searchInputRef.current.setSelectionRange(currentValue.length, currentValue.length);
-        }
-      });
+  // Handle search form submission
+  const handleSearchSubmit = useCallback((e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
     }
-  }, [patientsState.loading, patientsState.items]);
+
+    if (!selectedClinic) {
+      alert("กรุณาเลือกคลินิกก่อนทำการค้นหา");
+      return;
+    }
+
+    const trimmedSearch = searchTerm.trim();
+    setCurrentSearchTerm(trimmedSearch);
+
+    if (trimmedSearch) {
+      // Perform search
+      dispatch(searchPatients({ 
+        clinicId: toIdString(selectedClinic._id), 
+        search: trimmedSearch, 
+        page: 1 
+      }));
+    } else {
+      // If search is empty, fetch all patients
+      dispatch(fetchPatientsWithPagination({ 
+        clinicId: toIdString(selectedClinic._id) 
+      }));
+    }
+
+    // Optional: Keep focus on search input for better UX
+    searchInputRef.current?.focus();
+  }, [selectedClinic, searchTerm, dispatch]);
+
+  // Handle clear search
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm("");
+    setCurrentSearchTerm("");
+    
+    if (selectedClinic) {
+      // Fetch all patients (without search)
+      dispatch(
+        fetchPatientsWithPagination({
+          clinicId: toIdString(selectedClinic._id),
+        })
+      );
+    }
+    
+    // Maintain focus on the search input
+    searchInputRef.current?.focus();
+  }, [selectedClinic, dispatch]);
+
+  // Handle Enter key press in search input
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSearchSubmit();
+    }
+  }, [handleSearchSubmit]);
 
   // First, fetch admin data when component mounts
   useEffect(() => {
@@ -238,43 +243,6 @@ export default function AdminDashboard() {
     isInitialLoad,
   ]);
 
-  // Handle search input change
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    
-    // Mark that user is actively typing
-    isTypingRef.current = true;
-    setSearchTerm(value);
-
-    if (selectedClinic) {
-      debouncedSearch(value, toIdString(selectedClinic._id));
-    }
-  }, [selectedClinic, debouncedSearch]);
-
-  const handleClearSearch = useCallback(() => {
-    isTypingRef.current = false;
-    setSearchTerm("");
-    lastSearchTermRef.current = "";
-    
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
-    
-    if (selectedClinic) {
-      // Fetch all patients (without search)
-      dispatch(
-        fetchPatientsWithPagination({
-          clinicId: toIdString(selectedClinic._id),
-        })
-      );
-    }
-    
-    // Maintain focus on the search input
-    setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 0);
-  }, [selectedClinic, dispatch, searchTimeout]);
-
   const handleAddPatient = useCallback((): void => {
     if (selectedClinic) {
       router.push(`/patients/add?clinicId=${toIdString(selectedClinic._id)}`);
@@ -313,15 +281,14 @@ export default function AdminDashboard() {
 
       setDeleteDialog({ isOpen: false, patient: null });
 
-      // Refetch current page to update the list
+      // Refetch based on current search state
       const currentPage = patientsState.pagination?.currentPage || 1;
-      const currentSearch = patientsState.currentSearch || "";
       
-      if (currentSearch) {
+      if (currentSearchTerm) {
         dispatch(
           searchPatients({
             clinicId: toIdString(selectedClinic._id),
-            search: currentSearch,
+            search: currentSearchTerm,
             page: currentPage,
           })
         );
@@ -337,19 +304,14 @@ export default function AdminDashboard() {
       // Error is thrown back to the dialog component
       throw error;
     }
-  }, [deleteDialog.patient, selectedClinic, dispatch, patientsState.pagination, patientsState.currentSearch]);
+  }, [deleteDialog.patient, selectedClinic, dispatch, patientsState.pagination, currentSearchTerm]);
 
   const handleClinicChange = useCallback((clinicId: string): void => {
     if (!clinicId) return;
 
-    // Clear existing search and timeout
+    // Clear existing search
     setSearchTerm("");
-    lastSearchTermRef.current = "";
-    isTypingRef.current = false;
-    
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
+    setCurrentSearchTerm("");
 
     // Clear patients when changing clinic
     dispatch(clearPatients());
@@ -363,29 +325,54 @@ export default function AdminDashboard() {
       dispatch(setSelectedClinic(clinicId));
       dispatch(fetchPatientsWithPagination({ clinicId }));
     }
-  }, [clinicsState.items, dispatch, searchTimeout]);
+  }, [clinicsState.items, dispatch]);
 
   const handlePageChange = useCallback((page: number) => {
     if (selectedClinic) {
-      dispatch(
-        changePage({
-          clinicId: toIdString(selectedClinic._id),
-          page,
-        })
-      );
+      if (currentSearchTerm) {
+        // If there's an active search, search with the new page
+        dispatch(
+          searchPatients({
+            clinicId: toIdString(selectedClinic._id),
+            search: currentSearchTerm,
+            page,
+          })
+        );
+      } else {
+        // Otherwise, just change page
+        dispatch(
+          changePage({
+            clinicId: toIdString(selectedClinic._id),
+            page,
+          })
+        );
+      }
     }
-  }, [selectedClinic, dispatch]);
+  }, [selectedClinic, dispatch, currentSearchTerm]);
 
   const handlePageSizeChange = useCallback((newSize: number) => {
     if (selectedClinic) {
-      dispatch(
-        changePageSize({
-          clinicId: toIdString(selectedClinic._id),
-          limit: newSize,
-        })
-      );
+      if (currentSearchTerm) {
+        // If there's an active search, search with the new page size
+        dispatch(
+          searchPatients({
+            clinicId: toIdString(selectedClinic._id),
+            search: currentSearchTerm,
+            page: 1,
+            limit: newSize,
+          })
+        );
+      } else {
+        // Otherwise, just change page size
+        dispatch(
+          changePageSize({
+            clinicId: toIdString(selectedClinic._id),
+            limit: newSize,
+          })
+        );
+      }
     }
-  }, [selectedClinic, dispatch]);
+  }, [selectedClinic, dispatch, currentSearchTerm]);
 
   // Show loading screen
   if (loading || adminInfo.loading === "pending" || isInitialLoad) {
@@ -504,68 +491,70 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Search Bar with Enhanced Focus Management */}
-            <div className="mb-6">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-blue-400">🔍</span>
+            {/* Search Form with Search Button */}
+            <form onSubmit={handleSearchSubmit} className="mb-6">
+              <div className="flex gap-3">
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-blue-400">🔍</span>
+                  </div>
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="ค้นหาด้วย ชื่อ-สกุล, HN code, หรือ รหัสประชาชน..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
+                    className="block w-full pl-10 pr-4 py-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 focus:outline-none transition-colors"
+                    disabled={!selectedClinic || isLoading}
+                  />
                 </div>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="ค้นหาด้วย ชื่อ-สกุล, HN code, หรือ รหัสประชาชน..."
-                  value={searchTerm}
-                  onChange={handleSearchChange}
-                  onFocus={() => {
-                    isTypingRef.current = true;
-                  }}
-                  onBlur={(e) => {
-                    // Small delay to prevent focus loss during quick clicks
-                    setTimeout(() => {
-                      // Only set to false if focus hasn't returned
-                      if (document.activeElement !== searchInputRef.current) {
-                        isTypingRef.current = false;
-                      }
-                    }, 100);
-                  }}
-                  className="block w-full pl-10 pr-10 py-3 border border-blue-200 rounded-lg bg-blue-50 focus:ring-2 focus:ring-blue-300 focus:border-blue-300 focus:outline-none transition-colors"
+                
+                {/* Search Button */}
+                <button
+                  type="submit"
                   disabled={!selectedClinic || isLoading}
-                  // Prevent React from recreating the element
-                  key={`search-${selectedClinic?._id || 'none'}`}
-                />
-                {/* Clear button */}
-                {searchTerm && (
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isLoading ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      กำลังค้นหา...
+                    </>
+                  ) : (
+                    <>
+                      <span>🔍</span>
+                      ค้นหา
+                    </>
+                  )}
+                </button>
+
+                {/* Clear Button */}
+                {(searchTerm || currentSearchTerm) && (
                   <button
-                    onClick={handleClearSearch}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center hover:bg-blue-100 rounded-r-lg transition-colors"
                     type="button"
+                    onClick={handleClearSearch}
                     disabled={isLoading}
+                    className="flex items-center gap-2 px-4 py-3 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    <span className="text-blue-400 hover:text-blue-600 cursor-pointer">
-                      ❌
-                    </span>
+                    <span>❌</span>
+                    ล้าง
                   </button>
                 )}
               </div>
               
               {/* Search results info */}
-              {searchTerm && (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-3 gap-2">
+              {currentSearchTerm && (
+                <div className="mt-3">
                   <p className="text-sm text-blue-600">
-                    ค้นหา: "<span className="font-medium">{searchTerm}</span>" 
+                    กำลังแสดงผลการค้นหา: "<span className="font-medium">{currentSearchTerm}</span>" 
                     {pagination && (
                       <span> - พบ <span className="font-medium">{pagination.totalItems}</span> รายการ</span>
                     )}
                   </p>
-                  {isLoading && (
-                    <span className="text-xs text-blue-400 flex items-center">
-                      <span className="animate-spin mr-1">⏳</span>
-                      กำลังค้นหา...
-                    </span>
-                  )}
                 </div>
               )}
-            </div>
+            </form>
 
             {/* Page Size Selector and Info */}
             {pagination && pagination.totalItems > 0 && (
@@ -723,7 +712,7 @@ export default function AdminDashboard() {
               {selectedClinic &&
                 patientsState.loading === "succeeded" &&
                 pagination?.totalItems === 0 &&
-                !searchTerm && (
+                !currentSearchTerm && (
                   <div className="text-center py-8 text-blue-500">
                     <div className="text-5xl mb-3">📋</div>
                     <h3 className="text-xl font-medium mb-2">
@@ -745,14 +734,14 @@ export default function AdminDashboard() {
               {selectedClinic &&
                 patientsState.loading === "succeeded" &&
                 pagination?.totalItems === 0 &&
-                searchTerm && (
+                currentSearchTerm && (
                   <div className="text-center py-8 text-blue-400">
                     <div className="text-5xl mb-3">🔍</div>
                     <h3 className="text-xl font-medium mb-2">
                       ไม่พบผลการค้นหา
                     </h3>
                     <p className="text-blue-400 mb-4">
-                      ไม่พบผู้ป่วยที่ตรงกับ "<span className="font-medium">{searchTerm}</span>"
+                      ไม่พบผู้ป่วยที่ตรงกับ "<span className="font-medium">{currentSearchTerm}</span>"
                     </p>
                     <button
                       onClick={handleClearSearch}
@@ -831,10 +820,10 @@ export default function AdminDashboard() {
               <div>
                 <h4 className="font-medium mb-2">การค้นหา:</h4>
                 <ul className="space-y-1 text-blue-600">
-                  <li>• ค้นหาด้วยชื่อ-นามสกุล</li>
-                  <li>• ค้นหาด้วย HN Code</li>
-                  <li>• ค้นหาด้วยรหัสประชาชน</li>
-                  <li>• กดปุ่ม ❌ เพื่อล้างการค้นหา</li>
+                  <li>• พิมพ์คำค้นหาในช่องค้นหา</li>
+                  <li>• กดปุ่ม "ค้นหา" หรือ Enter เพื่อค้นหา</li>
+                  <li>• ค้นหาด้วยชื่อ-นามสกุล, HN Code, หรือรหัสประชาชน</li>
+                  <li>• กดปุ่ม "ล้าง" เพื่อแสดงผู้ป่วยทั้งหมด</li>
                 </ul>
               </div>
               <div>
@@ -853,4 +842,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-                    
