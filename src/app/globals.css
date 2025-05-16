@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @tailwind utilities;
 
-/* global.css */
+/* Global styles with proper font family fallback */
 
 /* Color Palette Variables */
 :root {
@@ -18,7 +18,12 @@
   --font-prompt: 'Prompt', sans-serif;
 }
 
-
+/* Set font family with fallbacks */
 body {
+  font-family: var(--font-prompt), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+/* Ensure font variables are applied */
+.font-prompt {
   font-family: var(--font-prompt);
 }
