@@ -22,7 +22,8 @@ module.exports = {
         "text-slate-blue": "#64748b",
       },
       fontFamily: {
-        prompt: ["var(--font-prompt)", "sans-serif"],
+        prompt: ["var(--font-prompt)", "Prompt", "sans-serif"],
+        sans: ["var(--font-prompt)", "Prompt", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       boxShadow: {
         soft: "0 2px 8px rgba(0, 0, 0, 0.1)",
