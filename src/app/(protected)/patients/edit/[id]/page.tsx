@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - Updated with proper deferred record deletion
+// src/app/(protected)/patients/edit/[id]/page.tsx - Fixed with async params
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -23,6 +23,11 @@ import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
 import { useDocumentManager, DocumentOperation } from "@/hooks";
 
+// Fix type for Next.js 15 - params is now a Promise
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
 // Helper function to format date for input fields
 const formatDateForInput = (date: string | Date | undefined): string => {
   if (!date) return "";
@@ -35,9 +40,9 @@ const formatDateForInput = (date: string | Date | undefined): string => {
   }
 };
 
-export default function EditPatient({ params }: { params: { id: string } }) {
-  // Get patient ID from route params
-  const patientId = params.id;
+export default function EditPatient({ params }: PageProps) {
+  // State to store the actual patient ID once params are resolved
+  const [patientId, setPatientId] = useState<string | null>(null);
 
   // Router and search params
   const router = useRouter();
@@ -76,6 +81,16 @@ export default function EditPatient({ params }: { params: { id: string } }) {
 
   // State for showing discard confirmation
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
+
+  // Resolve params Promise for Next.js 15
+  useEffect(() => {
+    const resolveParams = async () => {
+      const resolvedParams = await params;
+      setPatientId(resolvedParams.id);
+    };
+    
+    resolveParams();
+  }, [params]);
 
   // Initialize document manager for handling file operations
   const documentManager = useDocumentManager({
@@ -466,11 +481,12 @@ export default function EditPatient({ params }: { params: { id: string } }) {
     }
   };
 
-  // Show loading screen
+  // Show loading screen while resolving params or loading data
   if (
     loading ||
     adminInfo.loading === "pending" ||
-    patientLoading === "pending"
+    patientLoading === "pending" ||
+    !patientId // Show loading until params are resolved
   ) {
     return <LoadingScreen pageName="Edit Patient" />;
   }
@@ -504,7 +520,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
         title="Patient Data Error"
         error={"Failed to load patient data"}
         retry={() =>
-          dispatch(fetchPatientById({ patientId, clinicId: clinicId || "" }))
+          dispatch(fetchPatientById({ patientId: patientId!, clinicId: clinicId || "" }))
         }
         goBack={() => router.push("/dashboard")}
       />
@@ -736,7 +752,7 @@ export default function EditPatient({ params }: { params: { id: string } }) {
             {/* Medical History Section */}
             <div className="lg:col-span-2">
               <MedicalHistorySection
-                patientId={patientId}
+                patientId={patientId!}
                 clinicId={
                   selectedClinic ? toIdString(selectedClinic._id) : undefined
                 }

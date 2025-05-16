@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/add/page.tsx - Updated to use PatientForm with save functionality
+// src/app/(protected)/patients/add/page.tsx - Fixed for Next.js 15 (no params needed)
 "use client";
 
 import { useState, useEffect } from "react";
