@@ -3,14 +3,19 @@ import { Admin, Clinic } from "@/models";
 import { isValidObjectId, Types } from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 
+// Fix the interface for Next.js 15 - params is now a Promise
+interface AdminParamsProps {
+  params: Promise<{ id: string }>;
+}
+
 // Get all clinics managed by an admin
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: AdminParamsProps
 ) {
   try {
-    // params.id is already a string, no need to await
-    const id = params.id;
+    // Await the params Promise in Next.js 15
+    const { id } = await params;
 
     if (!isValidObjectId(id)) {
       return NextResponse.json(
@@ -46,11 +51,11 @@ export async function GET(
 // Add a clinic to an admin's managed clinics
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: AdminParamsProps
 ) {
   try {
-    // params.id is already a string, no need to await
-    const id = params.id;
+    // Await the params Promise in Next.js 15
+    const { id } = await params;
     const body = await request.json();
     const { clinicId } = body;
 
@@ -122,11 +127,11 @@ export async function POST(
 // Remove a clinic from an admin's managed clinics
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: AdminParamsProps
 ) {
   try {
-    // params.id is already a string, no need to await
-    const id = params.id;
+    // Await the params Promise in Next.js 15
+    const { id } = await params;
     const { searchParams } = new URL(request.url);
     const clinicId = searchParams.get("clinicId");
 

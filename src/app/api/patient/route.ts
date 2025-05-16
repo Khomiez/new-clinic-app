@@ -1,20 +1,38 @@
-// src/app/api/patient/route.ts - Updated with server-side pagination
+// src/app/api/patient/route.ts - Fixed with better error handling for dynamic models
 import { dbConnect } from "@/db";
 import PatientSchema from "@/models/Patient";
-import mongoose, { isValidObjectId } from "mongoose";
+import mongoose, { isValidObjectId, Model } from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import { buildPaginationQuery, createPaginatedResponse } from "@/utils/paginationHelpers";
 import { PaginationParams } from "@/interfaces/IPagination";
 
-// Get the correct model for the specific clinic
-function getPatientModel(clinicId: string) {
+// Define the Patient interface to match the schema
+interface IPatientDocument extends mongoose.Document {
+  name: string;
+  HN_code: string;
+  ID_code?: string;
+  history?: Array<{
+    timestamp?: Date;
+    document_urls?: string[];
+    notes?: string;
+  }>;
+  lastVisit?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Get the correct model for the specific clinic with proper typing
+function getPatientModel(clinicId: string): Model<IPatientDocument> {
   const modelName = `Patient_${clinicId}`;
   const collectionName = `patients_clinic_${clinicId}`;
 
-  return (
-    mongoose.models[modelName] ||
-    mongoose.model(modelName, PatientSchema, collectionName)
-  );
+  // If model already exists, return it with proper typing
+  if (mongoose.models[modelName]) {
+    return mongoose.models[modelName] as Model<IPatientDocument>;
+  }
+
+  // Otherwise, create it with proper typing
+  return mongoose.model<IPatientDocument>(modelName, PatientSchema, collectionName);
 }
 
 export async function GET(request: NextRequest) {
@@ -60,7 +78,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const patient = await Patient.findById(patientId);
+      const patient = await Patient.findById(patientId).lean().exec();
 
       if (!patient) {
         return NextResponse.json(
@@ -84,28 +102,37 @@ export async function GET(request: NextRequest) {
     const searchFields = ["name", "HN_code", "ID_code"];
     const { query, skip, sort } = buildPaginationQuery(paginationParams, searchFields);
 
-    // Execute query with pagination
-    const [patients, totalItems] = await Promise.all([
-      Patient.find(query)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .lean(), // Use lean() for better performance
-      Patient.countDocuments(query),
-    ]);
+    // Execute query with pagination using proper error handling
+    try {
+      const [patients, totalItems] = await Promise.all([
+        Patient.find(query)
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .lean() // Use lean() for better performance
+          .exec(), // Explicitly call exec()
+        Patient.countDocuments(query).exec(),
+      ]);
 
-    // Create paginated response
-    const paginatedResponse = createPaginatedResponse(
-      patients,
-      totalItems,
-      page,
-      limit
-    );
+      // Create paginated response
+      const paginatedResponse = createPaginatedResponse(
+        patients,
+        totalItems,
+        page,
+        limit
+      );
 
-    return NextResponse.json({ 
-      success: true, 
-      ...paginatedResponse
-    });
+      return NextResponse.json({ 
+        success: true, 
+        ...paginatedResponse
+      });
+    } catch (queryError) {
+      console.error("Error executing patient query:", queryError);
+      return NextResponse.json(
+        { success: false, error: "Failed to query patients" },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error("GET patients error:", error);
     return NextResponse.json(
@@ -143,26 +170,36 @@ export async function POST(request: NextRequest) {
     
     // If no HN_code is provided, generate one
     if (!body.HN_code) {
-      // Find the patient with the highest HN code
-      const lastPatient = await Patient.findOne({})
-        .sort({ HN_code: -1 })
-        .limit(1);
+      try {
+        // Find the patient with the highest HN code
+        const lastPatient = await Patient
+          .findOne({}, { HN_code: 1 })
+          .sort({ HN_code: -1 })
+          .lean()
+          .exec();
 
-      let nextHNCode = "HN0001"; // Default starting HN code
+        let nextHNCode = "HN0001"; // Default starting HN code
 
-      if (lastPatient && lastPatient.HN_code) {
-        // Extract the numeric part of the HN code
-        const lastCodeMatch = lastPatient.HN_code.match(/HN(\d+)/);
-        
-        if (lastCodeMatch && lastCodeMatch[1]) {
-          // Increment the numeric part and pad with zeros
-          const nextNumber = parseInt(lastCodeMatch[1], 10) + 1;
-          nextHNCode = `HN${nextNumber.toString().padStart(4, '0')}`;
+        if (lastPatient && lastPatient.HN_code) {
+          // Extract the numeric part of the HN code
+          const lastCodeMatch = lastPatient.HN_code.match(/HN(\d+)/);
+          
+          if (lastCodeMatch && lastCodeMatch[1]) {
+            // Increment the numeric part and pad with zeros
+            const nextNumber = parseInt(lastCodeMatch[1], 10) + 1;
+            nextHNCode = `HN${nextNumber.toString().padStart(4, '0')}`;
+          }
         }
+        
+        // Set the generated HN code
+        body.HN_code = nextHNCode;
+      } catch (hnError) {
+        console.error("Error generating HN code:", hnError);
+        return NextResponse.json(
+          { success: false, error: "Failed to generate HN code" },
+          { status: 500 }
+        );
       }
-      
-      // Set the generated HN code
-      body.HN_code = nextHNCode;
     }
 
     const patient = await Patient.create(body);
@@ -216,7 +253,7 @@ export async function PATCH(request: NextRequest) {
       patientId,
       { ...body, updatedAt: new Date() },
       { new: true, runValidators: true }
-    );
+    ).exec();
 
     if (!updatedPatient) {
       return NextResponse.json(
@@ -262,7 +299,7 @@ export async function DELETE(request: NextRequest) {
     const Patient = getPatientModel(clinicId);
 
     // First, get the patient to collect all document URLs
-    const patient = await Patient.findById(patientId);
+    const patient = await Patient.findById(patientId).lean().exec();
 
     if (!patient) {
       return NextResponse.json(
@@ -282,7 +319,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete patient from database
-    const result = await Patient.findByIdAndDelete(patientId);
+    const result = await Patient.findByIdAndDelete(patientId).exec();
 
     // If database deletion successful, clean up files
     if (documentUrls.length > 0) {

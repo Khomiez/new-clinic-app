@@ -1,4 +1,4 @@
-// src/app/api/clinic/[id]/files/route.ts - Updated to use server-side Cloudinary imports
+// src/app/api/clinic/[id]/files/route.ts - Fixed for Next.js 15
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFromCloudinary, extractPublicIdFromUrl, getClinicResources } from '@/utils/cloudinaryUploader';
 import { dbConnect } from '@/db';
@@ -19,12 +19,18 @@ interface FileResponse {
   tags?: string[];
 }
 
+// Fix interface for Next.js 15
+interface ClinicFilesParamsProps {
+  params: Promise<{ id: string }>;
+}
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: ClinicFilesParamsProps
 ) {
   try {
-    const { id } = params;
+    // Await the params Promise in Next.js 15
+    const { id } = await params;
     const { searchParams } = new URL(request.url);
     const patientId = searchParams.get('patientId');
 
@@ -88,7 +94,7 @@ export async function GET(
 
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: ClinicFilesParamsProps
   ) {
     try {
       const { searchParams } = new URL(request.url);

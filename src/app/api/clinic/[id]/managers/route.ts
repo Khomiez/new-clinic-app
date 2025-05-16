@@ -1,19 +1,21 @@
+// src/app/api/clinic/[id]/managers/route.ts - Fixed for Next.js 15
 import { type NextRequest, NextResponse } from "next/server"
 import { dbConnect } from "@/db"
 import { Admin, Clinic } from "@/models"
 import { isValidObjectId, type Types } from "mongoose"
 
 // Define interfaces for better type checking
-interface AdminIdParams {
-  params: {
+interface ClinicParamsProps {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // Get all managers (admins) of a clinic
-export async function GET(request: NextRequest, { params }: AdminIdParams) {
+export async function GET(request: NextRequest, { params }: ClinicParamsProps) {
     try {
-        const { id } = params
+        // Await the params Promise in Next.js 15
+        const { id } = await params;
 
         if (!isValidObjectId(id)) {
             return NextResponse.json({ error: "Invalid clinic ID format" }, { status: 400 })
@@ -36,9 +38,10 @@ export async function GET(request: NextRequest, { params }: AdminIdParams) {
 }
 
 // Add a manager (admin) to a clinic
-export async function POST(request: NextRequest, { params }: AdminIdParams) {
+export async function POST(request: NextRequest, { params }: ClinicParamsProps) {
     try {
-        const { id } = params
+        // Await the params Promise in Next.js 15
+        const { id } = await params;
         const body = await request.json()
         const { adminIds } = body  // Changed to adminIds for handling multiple admins
 
