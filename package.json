@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "tailwind:init": "tailwindcss init -p",
     "create-test-patient": "ts-node --project tsconfig.json scripts/create-test-patient.ts"
   },
   "dependencies": {
@@ -24,10 +23,10 @@
     "react-dom": "^19.0.0",
     "react-redux": "^9.2.0",
     "redux": "^5.0.1",
-    "redux-logger": "^3.0.6"
+    "redux-logger": "^3.0.6",
+    "tailwindcss": "^3.4.17"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.4",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^20",
@@ -37,7 +36,6 @@
     "autoprefixer": "^10.4.21",
     "dotenv": "^16.5.0",
     "postcss": "^8.5.3",
-    "tailwindcss": "^4.1.4",
     "ts-node": "^10.9.2",
     "typescript": "^5"
   }

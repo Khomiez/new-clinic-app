@@ -23,14 +23,6 @@ const nextConfig = {
       };
     }
 
-    // Optimize build by excluding certain modules from bundling
-    config.externals = config.externals || [];
-    if (!isServer) {
-      config.externals.push({
-        'cloudinary': 'commonjs cloudinary',
-      });
-    }
-
     return config;
   },
 
