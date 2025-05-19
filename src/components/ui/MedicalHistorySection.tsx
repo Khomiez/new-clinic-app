@@ -5,6 +5,7 @@ import HistoryRecord from "./HistoryRecord";
 import DocumentUpload from "./DocumentUpload";
 import { toIdString } from "@/utils/mongoHelpers";
 import { DocumentOperation } from "@/hooks/useDocumentManager";
+import { ThaiDatePicker } from "@/components";
 
 interface MedicalHistorySectionProps {
   patientId: string;
@@ -145,14 +146,14 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       alert("Date and time are required for the history record");
       return;
     }
-  
+
     try {
       // Add the record first
       onAddRecord(currentRecord);
-      
+
       // Commit all pending document operations (this handles any files that need to stay)
       await commitPendingOperations();
-      
+
       // Reset form
       setCurrentRecord({
         timestamp: new Date(),
@@ -162,8 +163,8 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       setIsAddingRecord(false);
       setIsAddingDocument(false);
     } catch (error) {
-      console.error('Error saving record:', error);
-      alert('Failed to save record. Please try again.');
+      console.error("Error saving record:", error);
+      alert("Failed to save record. Please try again.");
     }
   };
 
@@ -357,17 +358,23 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
               >
                 วันที่และเวลา<span className="text-red-500">*</span>
               </label>
-              <input
-                type="datetime-local"
-                id="timestamp"
-                name="timestamp"
-                value={formatDateTimeForInput(currentRecord.timestamp)}
-                onChange={handleRecordChange}
-                className="w-full px-3 py-2 border border-blue-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                required
+
+              {/* With this ThaiDatePicker */}
+              <ThaiDatePicker
+                selectedDate={
+                  currentRecord.timestamp instanceof Date
+                    ? currentRecord.timestamp
+                    : new Date(currentRecord.timestamp)
+                }
+                onChange={(date) => {
+                  setCurrentRecord((prev) => ({
+                    ...prev,
+                    timestamp: date,
+                  }));
+                }}
+                placeholder="เลือกวันที่และเวลา"
               />
             </div>
-
             {/* Notes */}
             <div>
               <label
