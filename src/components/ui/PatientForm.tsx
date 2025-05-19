@@ -98,20 +98,36 @@ const PatientForm: React.FC<PatientFormProps> = ({
         />
       </div>
 
-      <ThaiDateInput
-        id="lastVisit"
-        name="lastVisit"
-        value={
-          typeof patient.lastVisit === "string"
-            ? patient.lastVisit
-            : patient.lastVisit instanceof Date
-            ? patient.lastVisit.toISOString().split("T")[0]
-            : ""
-        }
-        onChange={handleChange}
-        disabled={disabled}
-        label="วันที่เข้ารับบริการครั้งล่าสุด"
-      />
+      <div>
+        <label
+          className="block text-sm font-medium text-slate-600 mb-1"
+          htmlFor="lastVisit"
+        >
+          วันที่เข้ารับบริการครั้งล่าสุด
+        </label>
+        <ThaiDatePicker
+          selectedDate={
+            patient.lastVisit
+              ? typeof patient.lastVisit === "string"
+                ? new Date(patient.lastVisit)
+                : patient.lastVisit
+              : null
+          }
+          onChange={(date) => {
+            // Create a synthetic event to match the onChange handler
+            const syntheticEvent = {
+              target: {
+                name: "lastVisit",
+                value: date.toISOString(),
+              },
+            } as React.ChangeEvent<HTMLInputElement>;
+
+            handleChange(syntheticEvent);
+          }}
+          disabled={disabled}
+          placeholder="เลือกวันที่เข้ารับบริการ"
+        />
+      </div>
 
       <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
         <p className="text-sm text-blue-600">

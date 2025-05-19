@@ -5,14 +5,11 @@ export const formatDateThai = (date: Date | string | undefined): string => {
   try {
     const dateObj = new Date(date);
 
-    // Thai Buddhist Era (BE) is 543 years ahead of CE
-    const buddhistYear = dateObj.getFullYear() + 543;
-
-    // Format as DD/MM/YYYY BE
+    // Format using Thai locale with Buddhist calendar
     return dateObj.toLocaleDateString("th-TH", {
-      day: "2-digit",
-      month: "2-digit",
       year: "numeric",
+      month: "long",
+      day: "numeric",
       calendar: "buddhist", // Use Buddhist calendar
     });
   } catch (e) {
@@ -28,11 +25,11 @@ export const formatDateTimeThai = (date: Date | string | undefined): string => {
   try {
     const dateObj = new Date(date);
 
-    // Format as DD/MM/YYYY HH:MM in Thai
+    // Format as day/month/year hour:minute in Thai with Buddhist Era
     return dateObj.toLocaleDateString("th-TH", {
-      day: "2-digit",
-      month: "2-digit",
       year: "numeric",
+      month: "long",
+      day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
       calendar: "buddhist", // Use Buddhist calendar

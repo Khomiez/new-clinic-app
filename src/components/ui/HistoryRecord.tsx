@@ -44,15 +44,17 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
   const [notesValue, setNotesValue] = useState(record.notes || "");
   const [isAddingDocument, setIsAddingDocument] = useState(false);
 
-  // Format the date nicely
   const formatDate = (dateString: string | Date): string => {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat("en-US", {
+
+    // Format with Thai Buddhist Era (BE) year (543 years ahead of CE)
+    return new Intl.DateTimeFormat("th-TH", {
       year: "numeric",
       month: "long",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      calendar: "buddhist", // Use Buddhist calendar
     }).format(date);
   };
 

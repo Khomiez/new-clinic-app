@@ -359,12 +359,14 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 วันที่และเวลา<span className="text-red-500">*</span>
               </label>
 
-              {/* With this ThaiDatePicker */}
+              {/* Use ThaiDatePicker */}
               <ThaiDatePicker
                 selectedDate={
                   currentRecord.timestamp instanceof Date
                     ? currentRecord.timestamp
-                    : new Date(currentRecord.timestamp)
+                    : typeof currentRecord.timestamp === "string"
+                    ? new Date(currentRecord.timestamp)
+                    : new Date()
                 }
                 onChange={(date) => {
                   setCurrentRecord((prev) => ({
@@ -375,6 +377,7 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
                 placeholder="เลือกวันที่และเวลา"
               />
             </div>
+            
             {/* Notes */}
             <div>
               <label
