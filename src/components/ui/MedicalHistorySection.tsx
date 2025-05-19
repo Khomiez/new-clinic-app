@@ -145,26 +145,14 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       alert("Date and time are required for the history record");
       return;
     }
-
+  
     try {
       // Add the record first
       onAddRecord(currentRecord);
-
+      
       // Commit all pending document operations (this handles any files that need to stay)
       await commitPendingOperations();
-
-      // Update the patient's lastVisit if this is a newer record
-      const currentTimestamp = new Date(currentRecord.timestamp).getTime();
-      const patientLastVisit = patient?.lastVisit
-        ? new Date(patient.lastVisit).getTime()
-        : 0;
-
-      if (currentTimestamp > patientLastVisit) {
-        // If this is a newer record, update the patient's lastVisit
-        // This typically happens in the parent component via API
-        // No action needed here as the parent component should handle this
-      }
-
+      
       // Reset form
       setCurrentRecord({
         timestamp: new Date(),
@@ -174,8 +162,8 @@ const MedicalHistorySection: React.FC<MedicalHistorySectionProps> = ({
       setIsAddingRecord(false);
       setIsAddingDocument(false);
     } catch (error) {
-      console.error("Error saving record:", error);
-      alert("Failed to save record. Please try again.");
+      console.error('Error saving record:', error);
+      alert('Failed to save record. Please try again.');
     }
   };
 
