@@ -9,6 +9,7 @@ import {
   LoadingScreen,
   ErrorScreen,
   MedicalHistorySection,
+  ThaiDatePicker,
 } from "@/components";
 import { IPatient, IClinic, IHistoryRecord } from "@/interfaces";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
@@ -69,7 +70,8 @@ export default function EditPatient({ params }: PageProps) {
     lastVisit: undefined,
     history: [],
   });
-  const [originalPatient, setOriginalPatient] = useState<Partial<IPatient> | null>(null);
+  const [originalPatient, setOriginalPatient] =
+    useState<Partial<IPatient> | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRollbackInProgress, setIsRollbackInProgress] = useState(false);
@@ -88,7 +90,7 @@ export default function EditPatient({ params }: PageProps) {
       const resolvedParams = await params;
       setPatientId(resolvedParams.id);
     };
-    
+
     resolveParams();
   }, [params]);
 
@@ -143,14 +145,22 @@ export default function EditPatient({ params }: PageProps) {
           return prev;
         }
 
-        if (!record.document_urls || documentIndex < 0 || documentIndex >= record.document_urls.length) {
-          console.error(`Invalid document index: ${documentIndex} for record ${actualIndex}`);
+        if (
+          !record.document_urls ||
+          documentIndex < 0 ||
+          documentIndex >= record.document_urls.length
+        ) {
+          console.error(
+            `Invalid document index: ${documentIndex} for record ${actualIndex}`
+          );
           return prev;
         }
 
         updatedHistory[actualIndex] = {
           ...record,
-          document_urls: record.document_urls.filter((_, i) => i !== documentIndex),
+          document_urls: record.document_urls.filter(
+            (_, i) => i !== documentIndex
+          ),
         };
 
         return {
@@ -159,7 +169,7 @@ export default function EditPatient({ params }: PageProps) {
         };
       });
     },
-    clinicId: clinicId || '',
+    clinicId: clinicId || "",
   });
 
   // Helper function to get actual record index (accounting for removed records)
@@ -241,8 +251,11 @@ export default function EditPatient({ params }: PageProps) {
   // Check for unsaved changes
   useEffect(() => {
     if (originalPatient && patient) {
-      const hasChanges = JSON.stringify(patient) !== JSON.stringify(originalPatient);
-      setHasUnsavedChanges(hasChanges || documentManager.pendingOperations.length > 0);
+      const hasChanges =
+        JSON.stringify(patient) !== JSON.stringify(originalPatient);
+      setHasUnsavedChanges(
+        hasChanges || documentManager.pendingOperations.length > 0
+      );
     }
   }, [patient, originalPatient, documentManager.pendingOperations]);
 
@@ -251,13 +264,14 @@ export default function EditPatient({ params }: PageProps) {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
         e.preventDefault();
-        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
         return e.returnValue;
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
   // Handle input changes for patient info
@@ -295,9 +309,10 @@ export default function EditPatient({ params }: PageProps) {
 
     try {
       // Filter out records that are marked for deletion
-      const recordsMarkedForDeletion = documentManager.getPendingRecordOperations();
-      const filteredHistory = patient.history?.filter((_, index) => 
-        !documentManager.isRecordMarkedForDeletion(index)
+      const recordsMarkedForDeletion =
+        documentManager.getPendingRecordOperations();
+      const filteredHistory = patient.history?.filter(
+        (_, index) => !documentManager.isRecordMarkedForDeletion(index)
       );
 
       // Prepare patient data for saving
@@ -317,7 +332,7 @@ export default function EditPatient({ params }: PageProps) {
 
       // Then commit all pending file operations (delete files marked for removal)
       await documentManager.commitPendingOperations();
-      
+
       // Update original state to current state
       setOriginalPatient(JSON.parse(JSON.stringify(patientToSave)));
       setHasUnsavedChanges(false);
@@ -326,12 +341,14 @@ export default function EditPatient({ params }: PageProps) {
       router.push(`/dashboard`);
     } catch (error: any) {
       console.error("Failed to update patient:", error);
-      
+
       // Show error and ask if user wants to keep editing
       const keepEditing = confirm(
-        `Failed to save changes: ${error.message || 'Unknown error'}. Would you like to keep editing?`
+        `Failed to save changes: ${
+          error.message || "Unknown error"
+        }. Would you like to keep editing?`
       );
-      
+
       if (!keepEditing) {
         // Reset to original state and go back
         await handleDiscard();
@@ -353,22 +370,22 @@ export default function EditPatient({ params }: PageProps) {
   // Confirm discard changes with proper rollback
   const confirmDiscard = async () => {
     setIsRollbackInProgress(true);
-    
+
     try {
       // Rollback any pending file operations
       await documentManager.rollbackPendingOperations();
-      
+
       // Reset to original state
       if (originalPatient) {
         setPatient(JSON.parse(JSON.stringify(originalPatient)));
         setHasUnsavedChanges(false);
       }
-      
+
       setShowDiscardConfirmation(false);
       router.push(`/dashboard`);
     } catch (error) {
-      console.error('Error during discard:', error);
-      alert('There was an error discarding changes. Please try again.');
+      console.error("Error during discard:", error);
+      alert("There was an error discarding changes. Please try again.");
     } finally {
       setIsRollbackInProgress(false);
     }
@@ -431,10 +448,10 @@ export default function EditPatient({ params }: PageProps) {
     const recordToRemove = patient.history?.[index];
     if (recordToRemove) {
       const documentUrls = recordToRemove.document_urls || [];
-      
+
       // Mark the record for deferred deletion (don't actually delete yet)
       await documentManager.markRecordForDeletion(index, documentUrls);
-      
+
       // Don't remove from state - just mark it for visual indication
       // The actual removal will happen only when saving
     }
@@ -470,14 +487,21 @@ export default function EditPatient({ params }: PageProps) {
     await documentManager.addDocumentWithRollback(recordIndex, url, false);
   };
 
-  const handleRemoveDocument = async (recordIndex: number, documentIndex: number) => {
+  const handleRemoveDocument = async (
+    recordIndex: number,
+    documentIndex: number
+  ) => {
     // Get the URL before removing for tracking
     const record = patient.history?.[recordIndex];
     const url = record?.document_urls?.[documentIndex];
-    
+
     if (url) {
       // Use document manager with deferred deletion
-      await documentManager.removeDocumentWithDeferred(recordIndex, documentIndex, url);
+      await documentManager.removeDocumentWithDeferred(
+        recordIndex,
+        documentIndex,
+        url
+      );
     }
   };
 
@@ -520,7 +544,12 @@ export default function EditPatient({ params }: PageProps) {
         title="Patient Data Error"
         error={"Failed to load patient data"}
         retry={() =>
-          dispatch(fetchPatientById({ patientId: patientId!, clinicId: clinicId || "" }))
+          dispatch(
+            fetchPatientById({
+              patientId: patientId!,
+              clinicId: clinicId || "",
+            })
+          )
         }
         goBack={() => router.push("/dashboard")}
       />
@@ -542,14 +571,19 @@ export default function EditPatient({ params }: PageProps) {
             {documentManager.pendingOperations.length > 0 && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
                 <p className="text-orange-700 text-sm">
-                  <strong>{documentManager.pendingOperations.length}</strong> file operation(s) will be reversed:
+                  <strong>{documentManager.pendingOperations.length}</strong>{" "}
+                  file operation(s) will be reversed:
                 </p>
                 <ul className="text-orange-600 text-xs mt-1 ml-4 list-disc">
                   {documentManager.pendingOperations.map((op, idx) => (
                     <li key={idx}>
-                      {op.type === 'add' ? 'Delete newly added file' : 
-                       op.type === 'remove' ? 'Restore removed file' :
-                       op.type === 'remove_record' ? 'Restore deleted record' : 'Unknown operation'}
+                      {op.type === "add"
+                        ? "Delete newly added file"
+                        : op.type === "remove"
+                        ? "Restore removed file"
+                        : op.type === "remove_record"
+                        ? "Restore deleted record"
+                        : "Unknown operation"}
                     </li>
                   ))}
                 </ul>
@@ -571,7 +605,9 @@ export default function EditPatient({ params }: PageProps) {
                 className="flex-1 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
                 disabled={isRollbackInProgress}
               >
-                {isRollbackInProgress ? 'Reverting changes...' : 'Discard Changes'}
+                {isRollbackInProgress
+                  ? "Reverting changes..."
+                  : "Discard Changes"}
               </button>
             </div>
           </div>
@@ -599,15 +635,14 @@ export default function EditPatient({ params }: PageProps) {
                 แก้ไขข้อมูลผู้ป่วย <span className="text-xl">👩‍⚕️</span>
                 {hasUnsavedChanges && (
                   <span className="text-sm bg-orange-100 text-orange-600 px-2 py-1 rounded">
-                    {documentManager.pendingOperations.length > 0 
+                    {documentManager.pendingOperations.length > 0
                       ? `${documentManager.pendingOperations.length} pending operations`
-                      : 'Unsaved changes'
-                    }
+                      : "Unsaved changes"}
                   </span>
                 )}
               </h1>
               <p className="text-slate-500">
-              ปรับปรุงข้อมูลผู้ป่วยและประวัติการรักษา
+                ปรับปรุงข้อมูลผู้ป่วยและประวัติการรักษา
               </p>
               {documentManager.pendingOperations.length > 0 && (
                 <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
@@ -615,19 +650,27 @@ export default function EditPatient({ params }: PageProps) {
                   <ul className="mt-1 ml-4 list-disc">
                     {documentManager.pendingOperations.map((op, idx) => (
                       <li key={idx}>
-                        {op.type === 'add' ? '📎 Added' : 
-                         op.type === 'remove' ? '🗑️ Marked for deletion' :
-                         op.type === 'remove_record' ? '📋 Record marked for deletion' : 'Unknown'}: 
+                        {op.type === "add"
+                          ? "📎 Added"
+                          : op.type === "remove"
+                          ? "🗑️ Marked for deletion"
+                          : op.type === "remove_record"
+                          ? "📋 Record marked for deletion"
+                          : "Unknown"}
+                        :
                         <span className="ml-1 font-mono">
-                          {op.type === 'remove_record' ? 
-                            `Record with ${op.recordDocuments?.length || 0} documents` :
-                            op.url.split('/').pop()
-                          }
+                          {op.type === "remove_record"
+                            ? `Record with ${
+                                op.recordDocuments?.length || 0
+                              } documents`
+                            : op.url.split("/").pop()}
                         </span>
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-1 font-medium">These changes will be committed when you save.</p>
+                  <p className="mt-1 font-medium">
+                    These changes will be committed when you save.
+                  </p>
                 </div>
               )}
             </div>
@@ -641,7 +684,9 @@ export default function EditPatient({ params }: PageProps) {
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving || !hasUnsavedChanges || isRollbackInProgress}
+                disabled={
+                  isSaving || !hasUnsavedChanges || isRollbackInProgress
+                }
                 className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:bg-blue-300"
               >
                 {isSaving ? (
@@ -664,7 +709,7 @@ export default function EditPatient({ params }: PageProps) {
                 <h2 className="text-xl text-blue-700 font-medium mb-4 flex items-center gap-2">
                   ข้อมูลผู้ป่วย 📋
                 </h2>
-                
+
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 gap-6">
                     <div>
@@ -691,7 +736,8 @@ export default function EditPatient({ params }: PageProps) {
                         className="block text-sm font-medium text-slate-600 mb-1"
                         htmlFor="HN_code"
                       >
-                        Hospital Number (HN) <span className="text-red-500">*</span>
+                        Hospital Number (HN){" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -722,7 +768,7 @@ export default function EditPatient({ params }: PageProps) {
                       className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
                     />
                   </div>
-                  
+
                   <div>
                     <label
                       className="block text-sm font-medium text-slate-600 mb-1"
@@ -730,19 +776,25 @@ export default function EditPatient({ params }: PageProps) {
                     >
                       วันที่เข้ารับบริการครั้งล่าสุด
                     </label>
-                    <input
-                      type="date"
-                      id="lastVisit"
-                      name="lastVisit"
-                      value={formatDateForInput(patient.lastVisit)}
-                      onChange={handleChange}
-                      className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
+                    <ThaiDatePicker
+                      selectedDate={
+                        patient.lastVisit ? new Date(patient.lastVisit) : null
+                      }
+                      onChange={(date) => {
+                        setPatient((prev) => ({
+                          ...prev,
+                          lastVisit: date,
+                        }));
+                      }}
+                      placeholder="เลือกวันที่เข้ารับบริการ"
                     />
                   </div>
-                  
+
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
                     <p className="text-sm text-blue-600">
-                      <span className="font-bold">Note:</span> ใช้ปุ่ม "save changes" ด้านบนเพื่อบันทึกข้อมูลผู้ป่วยและประวัติการรักษาทั้งหมด
+                      <span className="font-bold">Note:</span> ใช้ปุ่ม "save
+                      changes"
+                      ด้านบนเพื่อบันทึกข้อมูลผู้ป่วยและประวัติการรักษาทั้งหมด
                     </p>
                   </div>
                 </div>
@@ -766,15 +818,29 @@ export default function EditPatient({ params }: PageProps) {
                 // Pass documentManager props with undo functionality
                 pendingOperations={documentManager.pendingOperations}
                 isProcessing={documentManager.isProcessing}
-                addDocumentWithRollback={documentManager.addDocumentWithRollback}
-                removeDocumentWithDeferred={documentManager.removeDocumentWithDeferred}
+                addDocumentWithRollback={
+                  documentManager.addDocumentWithRollback
+                }
+                removeDocumentWithDeferred={
+                  documentManager.removeDocumentWithDeferred
+                }
                 markRecordForDeletion={documentManager.markRecordForDeletion}
-                rollbackPendingOperations={documentManager.rollbackPendingOperations}
-                commitPendingOperations={documentManager.commitPendingOperations}
+                rollbackPendingOperations={
+                  documentManager.rollbackPendingOperations
+                }
+                commitPendingOperations={
+                  documentManager.commitPendingOperations
+                }
                 cleanupOrphanedFiles={documentManager.cleanupOrphanedFiles}
-                isRecordMarkedForDeletion={documentManager.isRecordMarkedForDeletion}
-                getPendingRecordOperations={documentManager.getPendingRecordOperations}
-                removePendingRecordDeletion={documentManager.removePendingRecordDeletion}
+                isRecordMarkedForDeletion={
+                  documentManager.isRecordMarkedForDeletion
+                }
+                getPendingRecordOperations={
+                  documentManager.getPendingRecordOperations
+                }
+                removePendingRecordDeletion={
+                  documentManager.removePendingRecordDeletion
+                }
               />
             </div>
           </div>
