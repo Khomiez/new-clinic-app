@@ -1,6 +1,8 @@
 // src/components/ui/PatientForm.tsx - Enhanced with conditional save functionality
-import React from 'react';
-import { IPatient } from '@/interfaces';
+import React from "react";
+import { IPatient } from "@/interfaces";
+import ThaiDateInput from "./ThaiDateInput";
+import { ThaiDatePicker } from "@/components/ui";
 
 interface PatientFormProps {
   patient: Partial<IPatient>;
@@ -23,7 +25,7 @@ const PatientForm: React.FC<PatientFormProps> = ({
   disabled = false,
   isSubmitting = false,
   submitLabel = "Add Patient",
-  cancelAction
+  cancelAction,
 }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -59,7 +61,7 @@ const PatientForm: React.FC<PatientFormProps> = ({
             type="text"
             id="HN_code"
             name="HN_code"
-            value={isEditMode ? (patient.HN_code || "") : (nextHNCode || "HN0001")}
+            value={isEditMode ? patient.HN_code || "" : nextHNCode || "HN0001"}
             onChange={handleChange}
             placeholder={isEditMode ? "" : "Auto-generated"}
             disabled={true}
@@ -95,35 +97,31 @@ const PatientForm: React.FC<PatientFormProps> = ({
           className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
         />
       </div>
-      
-      <div>
-        <label
-          className="block text-sm font-medium text-slate-600 mb-1"
-          htmlFor="lastVisit"
-        >
-          วันที่เข้ารับบริการครั้งล่าสุด
-        </label>
-        <input
-          type="date"
-          id="lastVisit"
-          name="lastVisit"
-          value={typeof patient.lastVisit === 'string' ? patient.lastVisit : 
-                patient.lastVisit instanceof Date ? patient.lastVisit.toISOString().split('T')[0] : ''}
-          onChange={handleChange}
-          disabled={disabled}
-          className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
-        />
-      </div>
-      
+
+      <ThaiDateInput
+        id="lastVisit"
+        name="lastVisit"
+        value={
+          typeof patient.lastVisit === "string"
+            ? patient.lastVisit
+            : patient.lastVisit instanceof Date
+            ? patient.lastVisit.toISOString().split("T")[0]
+            : ""
+        }
+        onChange={handleChange}
+        disabled={disabled}
+        label="วันที่เข้ารับบริการครั้งล่าสุด"
+      />
+
       <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
         <p className="text-sm text-blue-600">
-          <span className="font-bold">Note:</span> {isEditMode 
-            ? 'การเปลี่ยนแปลงข้อมูลผู้ป่วยจะได้รับการบันทึกเมื่อคุณคลิก "save" ด้านบน' 
-            : 'สามารถเพิ่มบันทึกเวชระเบียนได้หลังจากสร้างผู้ป่วยแล้ว'
-          }
+          <span className="font-bold">Note:</span>{" "}
+          {isEditMode
+            ? 'การเปลี่ยนแปลงข้อมูลผู้ป่วยจะได้รับการบันทึกเมื่อคุณคลิก "save" ด้านบน'
+            : "สามารถเพิ่มบันทึกเวชระเบียนได้หลังจากสร้างผู้ป่วยแล้ว"}
         </p>
       </div>
-      
+
       {/* Show action buttons only for add mode (not edit mode) */}
       {!isEditMode && handleSubmit && (
         <div className="flex justify-end space-x-3 pt-4">
@@ -156,7 +154,7 @@ const PatientForm: React.FC<PatientFormProps> = ({
           </button>
         </div>
       )}
-      
+
       <div className="py-2">
         <p className="text-sm text-slate-500">
           <span className="text-red-500">*</span> ช่องที่จำเป็น

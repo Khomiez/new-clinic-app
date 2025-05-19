@@ -142,6 +142,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// src/app/api/patient/route.ts - Update in the POST function
 export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -163,7 +164,6 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-
     await dbConnect();
 
     const Patient = getPatientModel(clinicId);
@@ -202,7 +202,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const patient = await Patient.create(body);
+    // Determine the lastVisit date
+    let lastVisit = body.lastVisit;
+    
+    // If the history array exists, check for the latest history record date
+    if (body.history && Array.isArray(body.history) && body.history.length > 0) {
+      // Sort history records by timestamp (newest first)
+      const sortedHistory = [...body.history].sort((a, b) => {
+        const dateA = new Date(a.timestamp).getTime();
+        const dateB = new Date(b.timestamp).getTime();
+        return dateB - dateA;
+      });
+      
+      // Set lastVisit to the timestamp of the newest history record
+      if (sortedHistory[0] && sortedHistory[0].timestamp) {
+        lastVisit = sortedHistory[0].timestamp;
+      }
+    }
+    
+    // If no lastVisit is determined from history, use the provided lastVisit or current date
+    if (!lastVisit) {
+      lastVisit = new Date(); // Default to creation date
+    }
+
+    // Create patient with proper lastVisit
+    const patientToCreate = {
+      ...body,
+      lastVisit,
+    };
+
+    const patient = await Patient.create(patientToCreate);
 
     return NextResponse.json({ success: true, patient }, { status: 201 });
   } catch (error) {
@@ -214,22 +243,16 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// src/app/api/patient/route.ts - Update in the PATCH function
 export async function PATCH(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const clinicId = searchParams.get("clinicId");
     const patientId = searchParams.get("id");
 
-    if (!clinicId) {
+    if (!clinicId || !patientId) {
       return NextResponse.json(
-        { success: false, error: "clinicId is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!patientId) {
-      return NextResponse.json(
-        { success: false, error: "patientId is required" },
+        { success: false, error: "clinicId and patientId are required" },
         { status: 400 }
       );
     }
@@ -243,24 +266,53 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-
     await dbConnect();
 
     const Patient = getPatientModel(clinicId);
-
-    // Update patient with new data
-    const updatedPatient = await Patient.findByIdAndUpdate(
-      patientId,
-      { ...body, updatedAt: new Date() },
-      { new: true, runValidators: true }
-    ).exec();
-
-    if (!updatedPatient) {
+    
+    // Get the current patient to update the lastVisit field if needed
+    const currentPatient = await Patient.findById(patientId).lean().exec();
+    
+    if (!currentPatient) {
       return NextResponse.json(
         { success: false, error: "Patient not found" }, 
         { status: 404 }
       );
     }
+
+    // Determine the lastVisit date
+    let lastVisit = body.lastVisit;
+    
+    // If the history array is being updated, check for the latest history record date
+    if (body.history && Array.isArray(body.history) && body.history.length > 0) {
+      // Sort history records by timestamp (newest first)
+      const sortedHistory = [...body.history].sort((a, b) => {
+        const dateA = new Date(a.timestamp).getTime();
+        const dateB = new Date(b.timestamp).getTime();
+        return dateB - dateA;
+      });
+      
+      // Set lastVisit to the timestamp of the newest history record
+      if (sortedHistory[0] && sortedHistory[0].timestamp) {
+        lastVisit = sortedHistory[0].timestamp;
+      }
+    }
+    
+    // If no lastVisit is determined, use the original lastVisit or createdAt
+    if (!lastVisit) {
+      lastVisit = currentPatient.lastVisit || currentPatient.createdAt;
+    }
+
+    // Update patient with new data including the determined lastVisit
+    const updatedPatient = await Patient.findByIdAndUpdate(
+      patientId,
+      { 
+        ...body, 
+        lastVisit, 
+        updatedAt: new Date() 
+      },
+      { new: true, runValidators: true }
+    ).exec();
 
     return NextResponse.json({ success: true, patient: updatedPatient });
   } catch (error) {

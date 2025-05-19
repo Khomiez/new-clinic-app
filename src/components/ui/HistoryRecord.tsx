@@ -4,6 +4,7 @@ import { IHistoryRecord } from "@/interfaces";
 import DocumentUpload from "./DocumentUpload";
 import { toIdString } from "@/utils/mongoHelpers";
 import { DocumentOperation } from "@/hooks/useDocumentManager";
+import { ThaiDatePicker } from "@/components";
 import {
   extractFileInfo,
   getFileIcon,
@@ -144,12 +145,15 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
         <div className="flex-grow">
           {isEditingDate ? (
             <div className="flex items-center">
-              <input
-                type="datetime-local"
-                value={dateValue}
-                onChange={handleDateChange}
-                className="px-3 py-2 border border-blue-200 rounded-lg mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="flex-grow mr-2">
+                <ThaiDatePicker
+                  selectedDate={new Date(dateValue)}
+                  onChange={(date) => {
+                    setDateValue(date.toISOString().slice(0, 16));
+                  }}
+                  placeholder="เลือกวันที่และเวลา"
+                />
+              </div>
               <button
                 onClick={handleDateSubmit}
                 className="px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
@@ -274,10 +278,7 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
         {record.document_urls && record.document_urls.length > 0 ? (
           <div className="space-y-2">
             {record.document_urls.map((url, docIndex) => {
-              const isPendingRemoval = isDocumentPendingRemoval(
-                url,
-                docIndex
-              );
+              const isPendingRemoval = isDocumentPendingRemoval(url, docIndex);
               const isPendingAdd = isDocumentPendingAdd(url);
               const filename = getFilenameFromUrl(url);
 
@@ -331,9 +332,7 @@ const HistoryRecord: React.FC<HistoryRecordProps> = ({
 
                       {/* Delete Button */}
                       <button
-                        onClick={() =>
-                          handleRemoveDocumentClick(url, docIndex)
-                        }
+                        onClick={() => handleRemoveDocumentClick(url, docIndex)}
                         className="inline-flex items-center px-3 py-1.5 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
                         disabled={isPendingRemoval}
                         title="Delete file"
