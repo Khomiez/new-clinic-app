@@ -26,18 +26,14 @@ import {
 } from "@/redux/features/patients/patientsSlice";
 import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { setSelectedClinic } from "@/redux/features/settings/settingsSlice";
+import { formatDateThai } from "@/components";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
 import React from "react";
 
 // Format date for display
 const formatDate = (date: Date | string | undefined): string => {
-  if (!date) return "N/A";
-  return new Date(date).toLocaleDateString("th-TH", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return formatDateThai(date);
 };
 
 // PatientRow component to prevent unnecessary re-renders
