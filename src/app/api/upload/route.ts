@@ -1,4 +1,4 @@
-// src/app/api/upload/route.ts - Enhanced with metadata storage
+// src/app/api/upload/route.ts - Enhanced for Thai filename support
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadToCloudinary } from '@/utils/cloudinaryUploader';
 import { dbConnect } from '@/db';
@@ -23,6 +23,9 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const clinicId = formData.get('clinicId') as string;
     const patientId = formData.get('patientId') as string || undefined;
+
+    // Get the original filename explicitly if provided
+    const originalFilename = formData.get('originalFilename') as string || undefined;
 
     // Validate inputs
     if (!file) {
@@ -55,11 +58,17 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
+    // Use the provided originalFilename or fall back to file.name for Thai character support
+    const filename = originalFilename || file.name;
+
+    // Log the filename for debugging
+    console.log('Uploading file with name:', filename);
+    
     // Upload to Cloudinary with original filename
     const result = await uploadToCloudinary(buffer, {
       clinicId,
       clinicName: clinic.name,
-      filename: file.name, // Pass original filename
+      filename: filename, // Use the correct filename with Thai characters
       fileType: file.type,
       patientId,
       tags: ['medical_document', `type_${file.type.replace('/', '_')}`]
@@ -80,6 +89,7 @@ export async function POST(request: NextRequest) {
       
       const FileMetadataSchema = new mongoose.Schema({
         originalFilename: String,
+        encodedFilename: String, // Add an encoded version for safer storage
         size: Number,
         type: String,
         clinicId: String,
@@ -92,9 +102,10 @@ export async function POST(request: NextRequest) {
       const FileMetadata = mongoose.models.FileMetadata || 
                           mongoose.model('FileMetadata', FileMetadataSchema);
 
-      // Store metadata
+      // Store metadata with both original and encoded filenames
       await FileMetadata.create({
-        originalFilename: file.name,
+        originalFilename: filename,
+        encodedFilename: encodeURIComponent(filename), // Store encoded version for safer querying
         size: file.size,
         type: file.type,
         clinicId,
@@ -113,7 +124,7 @@ export async function POST(request: NextRequest) {
       success: true, 
       file: {
         ...result,
-        originalFilename: file.name,
+        originalFilename: filename, // Return the original Thai filename
         size: file.size,
         type: file.type,
       }

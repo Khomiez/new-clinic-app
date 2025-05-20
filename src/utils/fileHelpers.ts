@@ -1,4 +1,6 @@
-// src/utils/fileHelpers.ts - Client-side only file utilities (without Cloudinary imports)
+// src/utils/fileHelpers.ts - Updated to handle double-encoded Thai filenames
+import { decodeThaiFilename, containsEncodedThai } from './thaiFilenameFixUtils';
+
 export interface FileInfo {
   url: string;
   filename: string;
@@ -74,15 +76,24 @@ export function extractPublicIdFromUrl(url: string): string | null {
   }
 }
 
-// Enhanced filename extraction with fallback strategies
+// Enhanced filename extraction with fallback strategies - improved for double-encoded Thai characters
 export function extractOriginalFilename(url: string, context?: any): string {
   try {
     // Strategy 1: Check if context contains original filename
     if (context?.original_filename) {
+      // If it contains encoded Thai characters, decode it
+      if (containsEncodedThai(context.original_filename)) {
+        return decodeThaiFilename(context.original_filename);
+      }
       return context.original_filename;
     }
 
-    // Strategy 2: Extract from Cloudinary public_id
+    // Strategy 2: Check if context contains encoded_filename
+    if (context?.encoded_filename) {
+      return decodeThaiFilename(context.encoded_filename);
+    }
+
+    // Strategy 3: Extract from Cloudinary public_id
     const publicId = extractPublicIdFromUrl(url);
     if (publicId) {
       // Parse the public_id structure: folder/subfolder/filename_timestamp
@@ -92,23 +103,32 @@ export function extractOriginalFilename(url: string, context?: any): string {
       // Remove timestamp suffix (last part after underscore if it looks like a timestamp)
       const withoutTimestamp = filenamePart.replace(/_\d{13,}$/, "");
 
-      // Replace underscores with spaces and add appropriate extension
-      const reconstructed = withoutTimestamp.replace(/_/g, " ");
-      const extension = getFileExtensionFromUrl(url);
-
-      return extension ? `${reconstructed}.${extension}` : reconstructed;
+      // Check if filename contains encoded Thai characters
+      if (containsEncodedThai(withoutTimestamp)) {
+        const decodedName = decodeThaiFilename(withoutTimestamp.replace(/_/g, " "));
+        const extension = getFileExtensionFromUrl(url);
+        return extension ? `${decodedName}.${extension}` : decodedName;
+      } else {
+        // Regular ASCII filename
+        const reconstructed = withoutTimestamp.replace(/_/g, " ");
+        const extension = getFileExtensionFromUrl(url);
+        return extension ? `${reconstructed}.${extension}` : reconstructed;
+      }
     }
 
-    // Strategy 3: Extract from URL path
+    // Strategy 4: Extract from URL path with proper Thai decoding
     const urlParts = url.split("/");
     const filename = urlParts[urlParts.length - 1].split("?")[0];
 
-    // If URL contains a meaningful filename, use it
+    // If URL contains a meaningful filename, check for Thai encoding
     if (filename && !filename.match(/^[a-f0-9]+$/)) {
-      return decodeURIComponent(filename);
+      if (containsEncodedThai(filename)) {
+        return decodeThaiFilename(filename);
+      }
+      return filename;
     }
 
-    // Strategy 4: Fallback to generic name with proper extension
+    // Strategy 5: Fallback to generic name with proper extension
     const extension = getFileExtensionFromUrl(url);
     return extension ? `Document.${extension}` : "Document";
   } catch (error) {
@@ -138,6 +158,7 @@ export function getFileExtensionFromUrl(url: string): string {
 
 // Generate appropriate icon for file type
 export function getFileIcon(filename: string, url?: string): string {
+  // Try to handle both raw and decoded filenames
   const lower = filename.toLowerCase();
   const urlLower = url?.toLowerCase() || "";
 

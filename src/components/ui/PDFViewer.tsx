@@ -1,4 +1,4 @@
-// src/components/ui/PDFViewer.tsx
+// src/components/ui/PDFViewer.tsx - Enhanced with better Thai filename support
 import React, { useState } from "react";
 
 interface PDFViewerProps {
@@ -28,6 +28,17 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     setError("Failed to load PDF file");
   };
 
+  // Ensure filename is properly decoded for Thai characters when downloading
+  const downloadWithCorrectName = () => {
+    const link = document.createElement("a");
+    link.href = url;
+    // Use the decoded filename for the download
+    link.download = filename; // filename is already decoded in the FileList component
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl h-full max-h-[90vh] m-4 flex flex-col">
@@ -35,7 +46,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
         <div className="flex justify-between items-center p-4 border-b border-blue-100">
           <div className="flex items-center gap-2">
             <span className="text-2xl">📕</span>
-            <h3 className="text-lg font-medium text-blue-800 truncate">
+            <h3 className="text-lg font-medium text-blue-800 truncate" title={filename}>
               {filename}
             </h3>
           </div>
@@ -48,13 +59,12 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
             >
               Open in New Tab
             </a>
-            <a
-              href={url}
-              download={filename}
+            <button
+              onClick={downloadWithCorrectName}
               className="px-3 py-1.5 text-sm bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors"
             >
               Download
-            </a>
+            </button>
             <button
               onClick={onClose}
               className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"

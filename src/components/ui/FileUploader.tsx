@@ -1,4 +1,4 @@
-// src/components/ui/FileUploader.tsx
+// src/components/ui/FileUploader.tsx - Enhanced for Thai language support
 "use client";
 
 import React, { useState, useRef } from "react";
@@ -48,6 +48,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,6 +56,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     if (!files || files.length === 0) return;
 
     const file = files[0];
+    setSelectedFile(file);
 
     // Validate file size
     if (file.size > maxSizeMB * 1024 * 1024) {
@@ -64,6 +66,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       return;
     }
 
+    // Auto-upload the file when selected
+    await uploadFile(file);
+  };
+
+  const uploadFile = async (file: File) => {
     try {
       setIsUploading(true);
       setError(null);
@@ -75,6 +82,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       formData.append("clinicId", clinicId);
       if (patientId) formData.append("patientId", patientId);
 
+      // Add original filename explicitly (for Thai name preservation)
+      formData.append("originalFilename", file.name);
+      
       // Create abort controller for cancellation
       const controller = new AbortController();
       setAbortController(controller);
@@ -115,6 +125,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      setSelectedFile(null);
     } catch (err: any) {
       // Check if this is an abort error
       if (err.name === "AbortError") {
@@ -140,6 +151,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     // Reset states
     setIsUploading(false);
     setProgress(0);
+    setSelectedFile(null);
 
     // Reset file input
     if (fileInputRef.current) {
@@ -169,13 +181,26 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           >
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <span className="text-3xl mb-2">📄</span>
-              <p className="mb-2 text-sm text-blue-700">
-                <span className="font-semibold">Click to upload</span> or drag
-                and drop
-              </p>
-              <p className="text-xs text-blue-500">
-                {allowedTypes.split(",").join(", ")} (Max: {maxSizeMB}MB)
-              </p>
+              {selectedFile ? (
+                <div className="text-center">
+                  <p className="mb-1 text-sm font-medium text-blue-700">
+                    {selectedFile.name}
+                  </p>
+                  <p className="text-xs text-blue-500">
+                    {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="mb-2 text-sm text-blue-700">
+                    <span className="font-semibold">Click to upload</span> or drag
+                    and drop
+                  </p>
+                  <p className="text-xs text-blue-500">
+                    {allowedTypes.split(",").join(", ")} (Max: {maxSizeMB}MB)
+                  </p>
+                </>
+              )}
             </div>
             <input
               ref={fileInputRef}

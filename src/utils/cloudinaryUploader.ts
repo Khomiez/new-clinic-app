@@ -1,4 +1,4 @@
-// src/utils/cloudinaryUploader.ts - Server-side only Cloudinary utilities
+// src/utils/cloudinaryUploader.ts - Improved Thai filename support
 import { v2 as cloudinary } from "cloudinary";
 import type { UploadApiResponse, UploadApiOptions } from "cloudinary";
 
@@ -47,12 +47,18 @@ type UploadResponse =
       error: string;
     };
 
-// Helper function to sanitize filename for Cloudinary
+// Helper function to sanitize filename for Cloudinary while preserving Thai characters
 function sanitizeFilename(filename: string): string {
-  return filename
-    .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace special characters with underscore
+  // First, encode the Thai characters to preserve them
+  const encodedName = encodeURIComponent(filename);
+  
+  // Then replace unsafe characters with underscores, but retain the encoding
+  const sanitized = encodedName
+    .replace(/[^a-zA-Z0-9.-_%]/g, '_') // Replace special characters with underscore
     .replace(/_{2,}/g, '_') // Replace multiple underscores with single
     .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+    
+  return sanitized;
 }
 
 export async function uploadToCloudinary(
@@ -60,13 +66,15 @@ export async function uploadToCloudinary(
   options: UploadOptions
 ): Promise<UploadResponse> {
   try {
+    // Store the original filename with Thai characters
+    const originalFilename = options.filename || `document_${Date.now()}`;
+    
     // Sanitize clinic name for folder path
     const sanitizedClinicName = options.clinicName
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "_");
 
     // Extract filename without extension for public_id
-    const originalFilename = options.filename || `document_${Date.now()}`;
     const fileExtension = originalFilename.split('.').pop() || '';
     const filenameWithoutExt = originalFilename.replace(/\.[^/.]+$/, '');
     const sanitizedFilename = sanitizeFilename(filenameWithoutExt);
@@ -85,12 +93,13 @@ export async function uploadToCloudinary(
       folder,
       public_id: publicId,
       resource_type: "auto",
-      // Preserve original filename in metadata
+      // Preserve original filename in metadata - store both encoded and raw versions
       context: {
         clinic_id: options.clinicId,
         patient_id: options.patientId || "general",
         alt: originalFilename,
         original_filename: originalFilename, // Store original filename
+        encoded_filename: encodeURIComponent(originalFilename) // Store encoded version for safer processing
       },
       tags: [
         ...(options.tags || []),
@@ -118,7 +127,7 @@ export async function uploadToCloudinary(
       format: result.format,
       resource_type: result.resource_type,
       created_at: result.created_at,
-      original_filename: originalFilename,
+      original_filename: originalFilename, // Return the original Thai filename
     };
   } catch (error: any) {
     console.error("Cloudinary upload error:", error);
@@ -179,7 +188,13 @@ function extractFilenameFromPublicId(publicId: string): string {
   const lastPart = parts[parts.length - 1];
   // Remove timestamp suffix and sanitization
   const cleanedName = lastPart.replace(/_\d+$/, '').replace(/_/g, ' ');
-  return cleanedName || 'Document';
+  
+  // Try to decode in case it was encoded with Thai characters
+  try {
+    return decodeURIComponent(cleanedName) || 'Document';
+  } catch (e) {
+    return cleanedName || 'Document';
+  }
 }
 
 export async function deleteFromCloudinary(
