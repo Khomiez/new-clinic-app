@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - Fixed with async params
+// src/app/(protected)/patients/edit/[id]/page.tsx - Simplified without useDocumentManager
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -22,24 +22,11 @@ import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
 import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
-import { useDocumentManager, DocumentOperation } from "@/hooks";
 
 // Fix type for Next.js 15 - params is now a Promise
 interface PageProps {
   params: Promise<{ id: string }>;
 }
-
-// Helper function to format date for input fields
-const formatDateForInput = (date: string | Date | undefined): string => {
-  if (!date) return "";
-
-  try {
-    const dateObj = date instanceof Date ? date : new Date(date);
-    return dateObj.toISOString().split("T")[0];
-  } catch (e) {
-    return "";
-  }
-};
 
 export default function EditPatient({ params }: PageProps) {
   // State to store the actual patient ID once params are resolved
@@ -70,16 +57,12 @@ export default function EditPatient({ params }: PageProps) {
     lastVisit: undefined,
     history: [],
   });
-  const [originalPatient, setOriginalPatient] =
-    useState<Partial<IPatient> | null>(null);
+  const [originalPatient, setOriginalPatient] = useState<Partial<IPatient> | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isRollbackInProgress, setIsRollbackInProgress] = useState(false);
 
   // State for clinics
-  const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(
-    undefined
-  );
+  const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(undefined);
 
   // State for showing discard confirmation
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
@@ -90,94 +73,8 @@ export default function EditPatient({ params }: PageProps) {
       const resolvedParams = await params;
       setPatientId(resolvedParams.id);
     };
-
     resolveParams();
   }, [params]);
-
-  // Initialize document manager for handling file operations
-  const documentManager = useDocumentManager({
-    onAddDocument: (recordIndex, url) => {
-      setPatient((prev) => {
-        if (!prev.history) return prev;
-
-        // Adjust for removed records when adding documents
-        const actualIndex = getActualRecordIndex(recordIndex);
-        if (actualIndex < 0 || actualIndex >= prev.history.length) {
-          console.error(`Invalid record index: ${actualIndex}`);
-          return prev;
-        }
-
-        const updatedHistory = [...prev.history];
-        const record = updatedHistory[actualIndex];
-
-        if (!record) {
-          console.error(`Record at index ${actualIndex} is undefined`);
-          return prev;
-        }
-
-        updatedHistory[actualIndex] = {
-          ...record,
-          document_urls: [...(record.document_urls || []), url],
-        };
-
-        return {
-          ...prev,
-          history: updatedHistory,
-        };
-      });
-    },
-    onRemoveDocument: (recordIndex, documentIndex) => {
-      setPatient((prev) => {
-        if (!prev.history) return prev;
-
-        // Adjust for removed records when removing documents
-        const actualIndex = getActualRecordIndex(recordIndex);
-        if (actualIndex < 0 || actualIndex >= prev.history.length) {
-          console.error(`Invalid record index: ${actualIndex}`);
-          return prev;
-        }
-
-        const updatedHistory = [...prev.history];
-        const record = updatedHistory[actualIndex];
-
-        if (!record) {
-          console.error(`Record at index ${actualIndex} is undefined`);
-          return prev;
-        }
-
-        if (
-          !record.document_urls ||
-          documentIndex < 0 ||
-          documentIndex >= record.document_urls.length
-        ) {
-          console.error(
-            `Invalid document index: ${documentIndex} for record ${actualIndex}`
-          );
-          return prev;
-        }
-
-        updatedHistory[actualIndex] = {
-          ...record,
-          document_urls: record.document_urls.filter(
-            (_, i) => i !== documentIndex
-          ),
-        };
-
-        return {
-          ...prev,
-          history: updatedHistory,
-        };
-      });
-    },
-    clinicId: clinicId || "",
-  });
-
-  // Helper function to get actual record index (accounting for removed records)
-  const getActualRecordIndex = (displayIndex: number) => {
-    // Since we're not actually removing records from state anymore,
-    // we can use the display index directly
-    return displayIndex;
-  };
 
   // Fetch admin data and clinics when component mounts
   useEffect(() => {
@@ -251,21 +148,17 @@ export default function EditPatient({ params }: PageProps) {
   // Check for unsaved changes
   useEffect(() => {
     if (originalPatient && patient) {
-      const hasChanges =
-        JSON.stringify(patient) !== JSON.stringify(originalPatient);
-      setHasUnsavedChanges(
-        hasChanges || documentManager.pendingOperations.length > 0
-      );
+      const hasChanges = JSON.stringify(patient) !== JSON.stringify(originalPatient);
+      setHasUnsavedChanges(hasChanges);
     }
-  }, [patient, originalPatient, documentManager.pendingOperations]);
+  }, [patient, originalPatient]);
 
   // Handle browser refresh/close with unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
         e.preventDefault();
-        e.returnValue =
-          "You have unsaved changes. Are you sure you want to leave?";
+        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
         return e.returnValue;
       }
     };
@@ -292,7 +185,7 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // Enhanced save handler with proper commit
+  // Simplified save handler
   const handleSave = async () => {
     if (!patient._id || !clinicId) {
       alert("Missing patient ID or clinic ID");
@@ -308,51 +201,24 @@ export default function EditPatient({ params }: PageProps) {
     setIsSaving(true);
 
     try {
-      // Filter out records that are marked for deletion
-      const recordsMarkedForDeletion =
-        documentManager.getPendingRecordOperations();
-      const filteredHistory = patient.history?.filter(
-        (_, index) => !documentManager.isRecordMarkedForDeletion(index)
-      );
-
-      // Prepare patient data for saving
-      const patientToSave = {
-        ...patient,
-        history: filteredHistory,
-      };
-
-      // First save patient data
+      // Save patient data
       await dispatch(
         updatePatient({
           patientId: toIdString(patient._id),
           clinicId,
-          patientData: patientToSave,
+          patientData: patient,
         })
       ).unwrap();
 
-      // Then commit all pending file operations (delete files marked for removal)
-      await documentManager.commitPendingOperations();
-
       // Update original state to current state
-      setOriginalPatient(JSON.parse(JSON.stringify(patientToSave)));
+      setOriginalPatient(JSON.parse(JSON.stringify(patient)));
       setHasUnsavedChanges(false);
 
       // Navigate back to dashboard after successful update
       router.push(`/dashboard`);
     } catch (error: any) {
       console.error("Failed to update patient:", error);
-
-      // Show error and ask if user wants to keep editing
-      const keepEditing = confirm(
-        `Failed to save changes: ${
-          error.message || "Unknown error"
-        }. Would you like to keep editing?`
-      );
-
-      if (!keepEditing) {
-        // Reset to original state and go back
-        await handleDiscard();
-      }
+      alert(`Failed to save changes: ${error.message || "Unknown error"}`);
     } finally {
       setIsSaving(false);
     }
@@ -367,28 +233,15 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // Confirm discard changes with proper rollback
+  // Confirm discard changes
   const confirmDiscard = async () => {
-    setIsRollbackInProgress(true);
-
-    try {
-      // Rollback any pending file operations
-      await documentManager.rollbackPendingOperations();
-
-      // Reset to original state
-      if (originalPatient) {
-        setPatient(JSON.parse(JSON.stringify(originalPatient)));
-        setHasUnsavedChanges(false);
-      }
-
-      setShowDiscardConfirmation(false);
-      router.push(`/dashboard`);
-    } catch (error) {
-      console.error("Error during discard:", error);
-      alert("There was an error discarding changes. Please try again.");
-    } finally {
-      setIsRollbackInProgress(false);
+    // Reset to original state
+    if (originalPatient) {
+      setPatient(JSON.parse(JSON.stringify(originalPatient)));
+      setHasUnsavedChanges(false);
     }
+    setShowDiscardConfirmation(false);
+    router.push(`/dashboard`);
   };
 
   // Cancel discard
@@ -408,7 +261,7 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // Medical History handlers
+  // Medical History handlers - Simplified without document manager
   const handleAddRecord = (newRecord: IHistoryRecord) => {
     setPatient((prev) => {
       // Add the new record
@@ -442,18 +295,19 @@ export default function EditPatient({ params }: PageProps) {
     });
   };
 
-  // Updated: Use deferred deletion for records
+  // Simplified record removal
   const handleRemoveRecord = async (index: number) => {
-    // Get the record before removing it
-    const recordToRemove = patient.history?.[index];
-    if (recordToRemove) {
-      const documentUrls = recordToRemove.document_urls || [];
+    if (confirm("Are you sure you want to delete this medical record?")) {
+      setPatient((prev) => {
+        if (!prev.history) return prev;
 
-      // Mark the record for deferred deletion (don't actually delete yet)
-      await documentManager.markRecordForDeletion(index, documentUrls);
+        const updatedHistory = prev.history.filter((_, i) => i !== index);
 
-      // Don't remove from state - just mark it for visual indication
-      // The actual removal will happen only when saving
+        return {
+          ...prev,
+          history: updatedHistory,
+        };
+      });
     }
   };
 
@@ -481,27 +335,48 @@ export default function EditPatient({ params }: PageProps) {
     });
   };
 
-  // Document handlers - using document manager with deferred operations
+  // Simplified document handlers
   const handleAddDocument = async (recordIndex: number, url: string) => {
-    // Use document manager to track this addition
-    await documentManager.addDocumentWithRollback(recordIndex, url, false);
+    setPatient((prev) => {
+      if (!prev.history) return prev;
+
+      const updatedHistory = [...prev.history];
+      const record = updatedHistory[recordIndex];
+
+      if (!record) return prev;
+
+      updatedHistory[recordIndex] = {
+        ...record,
+        document_urls: [...(record.document_urls || []), url],
+      };
+
+      return {
+        ...prev,
+        history: updatedHistory,
+      };
+    });
   };
 
-  const handleRemoveDocument = async (
-    recordIndex: number,
-    documentIndex: number
-  ) => {
-    // Get the URL before removing for tracking
-    const record = patient.history?.[recordIndex];
-    const url = record?.document_urls?.[documentIndex];
+  const handleRemoveDocument = async (recordIndex: number, documentIndex: number) => {
+    if (confirm("Are you sure you want to delete this document?")) {
+      setPatient((prev) => {
+        if (!prev.history) return prev;
 
-    if (url) {
-      // Use document manager with deferred deletion
-      await documentManager.removeDocumentWithDeferred(
-        recordIndex,
-        documentIndex,
-        url
-      );
+        const updatedHistory = [...prev.history];
+        const record = updatedHistory[recordIndex];
+
+        if (!record || !record.document_urls) return prev;
+
+        updatedHistory[recordIndex] = {
+          ...record,
+          document_urls: record.document_urls.filter((_, i) => i !== documentIndex),
+        };
+
+        return {
+          ...prev,
+          history: updatedHistory,
+        };
+      });
     }
   };
 
@@ -565,49 +440,21 @@ export default function EditPatient({ params }: PageProps) {
             <h3 className="text-xl font-bold text-red-600 mb-4">
               Discard Changes?
             </h3>
-            <p className="text-gray-700 mb-4">
-              You have unsaved changes that will be lost.
-            </p>
-            {documentManager.pendingOperations.length > 0 && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
-                <p className="text-orange-700 text-sm">
-                  <strong>{documentManager.pendingOperations.length}</strong>{" "}
-                  file operation(s) will be reversed:
-                </p>
-                <ul className="text-orange-600 text-xs mt-1 ml-4 list-disc">
-                  {documentManager.pendingOperations.map((op, idx) => (
-                    <li key={idx}>
-                      {op.type === "add"
-                        ? "Delete newly added file"
-                        : op.type === "remove"
-                        ? "Restore removed file"
-                        : op.type === "remove_record"
-                        ? "Restore deleted record"
-                        : "Unknown operation"}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
             <p className="text-gray-700 mb-6">
-              Are you sure you want to continue?
+              You have unsaved changes that will be lost. Are you sure you want to continue?
             </p>
             <div className="flex space-x-3">
               <button
                 onClick={cancelDiscard}
                 className="flex-1 py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition"
-                disabled={isRollbackInProgress}
               >
                 Keep Editing
               </button>
               <button
                 onClick={confirmDiscard}
                 className="flex-1 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-                disabled={isRollbackInProgress}
               >
-                {isRollbackInProgress
-                  ? "Reverting changes..."
-                  : "Discard Changes"}
+                Discard Changes
               </button>
             </div>
           </div>
@@ -635,58 +482,25 @@ export default function EditPatient({ params }: PageProps) {
                 แก้ไขข้อมูลผู้ป่วย <span className="text-xl">👩‍⚕️</span>
                 {hasUnsavedChanges && (
                   <span className="text-sm bg-orange-100 text-orange-600 px-2 py-1 rounded">
-                    {documentManager.pendingOperations.length > 0
-                      ? `${documentManager.pendingOperations.length} pending operations`
-                      : "Unsaved changes"}
+                    Unsaved changes
                   </span>
                 )}
               </h1>
               <p className="text-slate-500">
                 ปรับปรุงข้อมูลผู้ป่วยและประวัติการรักษา
               </p>
-              {documentManager.pendingOperations.length > 0 && (
-                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
-                  <strong>Pending Operations:</strong>
-                  <ul className="mt-1 ml-4 list-disc">
-                    {documentManager.pendingOperations.map((op, idx) => (
-                      <li key={idx}>
-                        {op.type === "add"
-                          ? "📎 Added"
-                          : op.type === "remove"
-                          ? "🗑️ Marked for deletion"
-                          : op.type === "remove_record"
-                          ? "📋 Record marked for deletion"
-                          : "Unknown"}
-                        :
-                        <span className="ml-1 font-mono">
-                          {op.type === "remove_record"
-                            ? `Record with ${
-                                op.recordDocuments?.length || 0
-                              } documents`
-                            : op.url.split("/").pop()}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-1 font-medium">
-                    These changes will be committed when you save.
-                  </p>
-                </div>
-              )}
             </div>
             <div className="flex gap-3">
               <button
                 onClick={handleDiscard}
                 className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition flex items-center gap-1"
-                disabled={isSaving || isRollbackInProgress}
+                disabled={isSaving}
               >
                 <span>Cancel</span> ❌
               </button>
               <button
                 onClick={handleSave}
-                disabled={
-                  isSaving || !hasUnsavedChanges || isRollbackInProgress
-                }
+                disabled={isSaving || !hasUnsavedChanges}
                 className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:bg-blue-300"
               >
                 {isSaving ? (
@@ -736,8 +550,7 @@ export default function EditPatient({ params }: PageProps) {
                         className="block text-sm font-medium text-slate-600 mb-1"
                         htmlFor="HN_code"
                       >
-                        Hospital Number (HN){" "}
-                        <span className="text-red-500">*</span>
+                        Hospital Number (HN) <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -777,9 +590,7 @@ export default function EditPatient({ params }: PageProps) {
                       วันที่เข้ารับบริการครั้งล่าสุด
                     </label>
                     <ThaiDatePicker
-                      selectedDate={
-                        patient.lastVisit ? new Date(patient.lastVisit) : null
-                      }
+                      selectedDate={patient.lastVisit ? new Date(patient.lastVisit) : null}
                       onChange={(date) => {
                         setPatient((prev) => ({
                           ...prev,
@@ -792,8 +603,7 @@ export default function EditPatient({ params }: PageProps) {
 
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
                     <p className="text-sm text-blue-600">
-                      <span className="font-bold">Note:</span> ใช้ปุ่ม "save
-                      changes"
+                      <span className="font-bold">Note:</span> ใช้ปุ่ม "save changes"
                       ด้านบนเพื่อบันทึกข้อมูลผู้ป่วยและประวัติการรักษาทั้งหมด
                     </p>
                   </div>
@@ -805,9 +615,7 @@ export default function EditPatient({ params }: PageProps) {
             <div className="lg:col-span-2">
               <MedicalHistorySection
                 patientId={patientId!}
-                clinicId={
-                  selectedClinic ? toIdString(selectedClinic._id) : undefined
-                }
+                clinicId={selectedClinic ? toIdString(selectedClinic._id) : undefined}
                 historyRecords={patient.history || []}
                 onAddRecord={handleAddRecord}
                 onUpdateRecord={handleUpdateRecord}
@@ -815,32 +623,6 @@ export default function EditPatient({ params }: PageProps) {
                 onUpdateRecordDate={handleUpdateRecordDate}
                 onAddDocument={handleAddDocument}
                 onRemoveDocument={handleRemoveDocument}
-                // Pass documentManager props with undo functionality
-                pendingOperations={documentManager.pendingOperations}
-                isProcessing={documentManager.isProcessing}
-                addDocumentWithRollback={
-                  documentManager.addDocumentWithRollback
-                }
-                removeDocumentWithDeferred={
-                  documentManager.removeDocumentWithDeferred
-                }
-                markRecordForDeletion={documentManager.markRecordForDeletion}
-                rollbackPendingOperations={
-                  documentManager.rollbackPendingOperations
-                }
-                commitPendingOperations={
-                  documentManager.commitPendingOperations
-                }
-                cleanupOrphanedFiles={documentManager.cleanupOrphanedFiles}
-                isRecordMarkedForDeletion={
-                  documentManager.isRecordMarkedForDeletion
-                }
-                getPendingRecordOperations={
-                  documentManager.getPendingRecordOperations
-                }
-                removePendingRecordDeletion={
-                  documentManager.removePendingRecordDeletion
-                }
               />
             </div>
           </div>
