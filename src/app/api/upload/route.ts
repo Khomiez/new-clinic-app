@@ -1,4 +1,4 @@
-// src/app/api/upload/route.ts - Simplified upload API
+// src/app/api/upload/route.ts - Fixed with proper filename preservation
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadToCloudinary } from '@/utils/cloudinaryUploader';
 import { dbConnect } from '@/db';
@@ -41,11 +41,11 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Upload to Cloudinary
+    // Upload to Cloudinary with preserved filename
     const result = await uploadToCloudinary(buffer, {
       clinicId,
       clinicName: clinic.name,
-      filename: file.name,
+      filename: file.name, // This preserves the original filename exactly
       fileType: file.type,
       patientId,
     });
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       success: true,
       file: {
         url: result.url,
-        filename: file.name,
+        filename: result.originalFilename || file.name, // Use original filename
         size: file.size,
         type: file.type,
       }

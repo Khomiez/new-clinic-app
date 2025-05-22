@@ -1,21 +1,122 @@
-// src/components/ui/FileList.tsx - Simplified file display component
+// src/components/ui/FileList.tsx - Fixed with proper filename display and simplified actions
 "use client";
 
 import React, { useState } from "react";
-import { 
-  createFileInfo, 
-  getFileIcon, 
-  canPreviewFile, 
-  downloadFile,
-  FileInfo 
-} from "@/utils/fileUtils";
+import { getOriginalFilename } from "@/utils/cloudinaryUploader";
 import PDFViewer from "./PDFViewer";
 
+// Updated FileInfo interface to match your needs
+interface FileInfo {
+  url: string;
+  filename: string;
+  type: string;
+  size?: number;
+  uploadedAt?: Date;
+}
+
+interface CloudinaryResource {
+  public_id: string;
+  secure_url: string;
+  format: string;
+  resource_type: string;
+  created_at: string;
+  original_filename?: string;
+  context?: {
+    [key: string]: string;
+  };
+  tags?: string[];
+}
+
 interface FileListProps {
-  files: string[] | FileInfo[];
+  files: string[] | FileInfo[] | CloudinaryResource[];
   onDeleteFile?: (fileUrl: string, index: number) => void;
   showActions?: boolean;
   compact?: boolean;
+}
+
+// Get appropriate icon for file type
+function getFileIcon(filename: string): string {
+  const name = filename.toLowerCase();
+  
+  if (name.endsWith('.pdf')) return '📕';
+  if (name.match(/\.(jpg|jpeg|png|gif|webp)$/)) return '🖼️';
+  if (name.match(/\.(doc|docx)$/)) return '📝';
+  if (name.match(/\.(xls|xlsx|csv)$/)) return '📊';
+  return '📄';
+}
+
+// Check if file can be viewed in browser
+function canPreviewFile(filename: string): boolean {
+  const name = filename.toLowerCase();
+  return name.endsWith('.pdf') || name.match(/\.(jpg|jpeg|png|gif|webp)$/) !== null;
+}
+
+// Format file size for display
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return "";
+
+  const units = ["B", "KB", "MB", "GB"];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+}
+
+// Extract filename from URL as fallback
+function extractFilenameFromUrl(url: string): string {
+  try {
+    const urlParts = url.split("/");
+    let filename = urlParts[urlParts.length - 1].split("?")[0];
+    
+    // Try to decode URI components for Thai characters
+    try {
+      filename = decodeURIComponent(filename);
+    } catch {
+      // If decoding fails, use as-is
+    }
+    
+    return filename || "Document";
+  } catch {
+    return "Document";
+  }
+}
+
+// Normalize different file input types to a consistent format
+function normalizeFileInfo(file: string | FileInfo | CloudinaryResource): FileInfo {
+  if (typeof file === "string") {
+    // String URL
+    return {
+      url: file,
+      filename: extractFilenameFromUrl(file),
+      type: "file",
+    };
+  } else if ("secure_url" in file) {
+    // Cloudinary resource
+    return {
+      url: file.secure_url,
+      filename: getOriginalFilename(file), // Use the fixed function from cloudinaryUploader
+      type: file.resource_type === "image" ? "image" : "file",
+    };
+  } else {
+    // FileInfo object
+    return file;
+  }
+}
+
+// Safe download with proper filename
+function downloadFile(url: string, filename: string): void {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.target = "_blank"; // Open in new tab instead of download
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 export default function FileList({
@@ -29,13 +130,9 @@ export default function FileList({
     url: string;
     filename: string;
   }>({ isOpen: false, url: "", filename: "" });
-  
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  // Normalize files to FileInfo objects
-  const fileInfos = files.map(file => 
-    typeof file === "string" ? createFileInfo(file) : file
-  );
+  // Normalize all files to FileInfo objects
+  const fileInfos = files.map(normalizeFileInfo);
 
   const handlePDFView = (url: string, filename: string) => {
     setPdfViewer({ isOpen: true, url, filename });
@@ -43,10 +140,6 @@ export default function FileList({
 
   const handleDownload = (url: string, filename: string) => {
     downloadFile(url, filename);
-  };
-
-  const toggleImagePreview = (url: string) => {
-    setImagePreview(prev => prev === url ? null : url);
   };
 
   if (fileInfos.length === 0) {
@@ -78,7 +171,7 @@ export default function FileList({
               {/* File Info */}
               <div className="flex items-center space-x-3 flex-1 min-w-0">
                 <span className={compact ? "text-lg" : "text-xl"}>
-                  {getFileIcon(file.filename, file.url)}
+                  {getFileIcon(file.filename)}
                 </span>
                 
                 <div className="flex-1 min-w-0">
@@ -93,56 +186,22 @@ export default function FileList({
                   
                   {!compact && file.size && (
                     <span className="text-xs text-gray-500">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                      {formatFileSize(file.size)}
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Actions */}
+              {/* Actions - Only Download and Delete */}
               {showActions && (
                 <div className="flex items-center space-x-2">
-                  {/* Preview Actions */}
-                  {file.type === "application/pdf" && (
-                    <button
-                      onClick={() => handlePDFView(file.url, file.filename)}
-                      className={`bg-purple-100 text-purple-600 px-2 py-1 rounded hover:bg-purple-200 transition-colors ${
-                        compact ? "text-xs" : "text-sm"
-                      }`}
-                    >
-                      📖 View
-                    </button>
-                  )}
-
-                  {file.type === "image" && (
-                    <button
-                      onClick={() => toggleImagePreview(file.url)}
-                      className={`bg-green-100 text-green-600 px-2 py-1 rounded hover:bg-green-200 transition-colors ${
-                        compact ? "text-xs" : "text-sm"
-                      }`}
-                    >
-                      {imagePreview === file.url ? "Hide" : "View"}
-                    </button>
-                  )}
-
-                  {/* Open in New Tab */}
-                  <a
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  {/* Download (Opens in new tab) */}
+                  <button
+                    onClick={() => handleDownload(file.url, file.filename)}
                     className={`bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition-colors ${
                       compact ? "text-xs" : "text-sm"
                     }`}
-                  >
-                    Open
-                  </a>
-
-                  {/* Download */}
-                  <button
-                    onClick={() => handleDownload(file.url, file.filename)}
-                    className={`bg-gray-100 text-gray-600 px-2 py-1 rounded hover:bg-gray-200 transition-colors ${
-                      compact ? "text-xs" : "text-sm"
-                    }`}
+                    title="Download / Open in new tab"
                   >
                     Download
                   </button>
@@ -154,6 +213,7 @@ export default function FileList({
                       className={`bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 transition-colors ${
                         compact ? "text-xs" : "text-sm"
                       }`}
+                      title="Delete file"
                     >
                       Delete
                     </button>
@@ -161,23 +221,6 @@ export default function FileList({
                 </div>
               )}
             </div>
-
-            {/* Image Preview */}
-            {imagePreview === file.url && file.type === "image" && (
-              <div className="mt-2 p-2 bg-gray-100 rounded-lg">
-                <img
-                  src={file.url}
-                  alt={file.filename}
-                  className="max-w-full max-h-64 object-contain mx-auto border border-gray-300 rounded"
-                />
-                <button
-                  onClick={() => setImagePreview(null)}
-                  className="mt-2 mx-auto block text-sm bg-gray-200 text-gray-600 px-2 py-1 rounded hover:bg-gray-300"
-                >
-                  Close Preview
-                </button>
-              </div>
-            )}
           </div>
         ))}
       </div>

@@ -1,4 +1,4 @@
-// src/components/ui/HistoryRecord.tsx - Simplified history record component
+// src/components/ui/HistoryRecord.tsx - Fixed with simplified actions
 "use client";
 
 import React, { useState } from "react";
@@ -199,7 +199,7 @@ export default function HistoryRecord({
           </div>
         )}
 
-        {/* Documents List */}
+        {/* Documents List - Fixed to use proper FileList component */}
         <FileList
           files={record.document_urls || []}
           onDeleteFile={handleDeleteDocument}

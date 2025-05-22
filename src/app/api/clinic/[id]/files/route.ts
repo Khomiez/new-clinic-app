@@ -1,18 +1,18 @@
-// src/app/api/clinic/[id]/files/route.ts - Fixed for Next.js 15
+// src/app/api/clinic/[id]/files/route.ts - Fixed with proper filename handling
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteFromCloudinary, extractPublicIdFromUrl, getClinicResources } from '@/utils/cloudinaryUploader';
+import { deleteFromCloudinary, extractPublicIdFromUrl, getClinicResources, getOriginalFilename } from '@/utils/cloudinaryUploader';
 import { dbConnect } from '@/db';
 import { isValidObjectId } from 'mongoose';
 import { Clinic } from '@/models';
 
-// Define a type for the file response
+// Define a type for the file response with proper filename
 interface FileResponse {
   id: string;
   url: string;
   format: string;
   resourceType: string;
   createdAt: string;
-  originalFilename?: string;
+  originalFilename: string; // Always include this
   context?: {
     [key: string]: string;
   };
@@ -68,13 +68,14 @@ export async function GET(
       );
     }
 
+    // Map resources to FileResponse with proper filename extraction
     const files: FileResponse[] = filteredResources.map(resource => ({
       id: resource.public_id,
       url: resource.secure_url,
       format: resource.format,
       resourceType: resource.resource_type,
       createdAt: resource.created_at,
-      originalFilename: resource.original_filename,
+      originalFilename: getOriginalFilename(resource), // Use the fixed function
       context: resource.context,
       tags: resource.tags
     }));
