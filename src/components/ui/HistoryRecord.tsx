@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import { IHistoryRecord } from "@/interfaces";
 import DocumentUpload from "./DocumentUpload";
-import FileList from "./FileList";
+import EnhancedFileList from "./EnhancedFileList";
 import { ThaiDatePicker } from "@/components";
 
 interface HistoryRecordProps {
@@ -111,7 +111,7 @@ export default function HistoryRecord({
             </div>
           )}
         </div>
-        
+
         <button
           onClick={() => onRemove(index)}
           className="text-red-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50"
@@ -163,7 +163,9 @@ export default function HistoryRecord({
         ) : (
           <div className="bg-blue-50 p-3 rounded-lg">
             {record.notes ? (
-              <p className="text-gray-700 whitespace-pre-wrap">{record.notes}</p>
+              <p className="text-gray-700 whitespace-pre-wrap">
+                {record.notes}
+              </p>
             ) : (
               <p className="text-gray-500 italic">No notes for this visit</p>
             )}
@@ -200,8 +202,9 @@ export default function HistoryRecord({
         )}
 
         {/* Documents List - Fixed to use proper FileList component */}
-        <FileList
-          files={record.document_urls || []}
+        <EnhancedFileList
+          fileUrls={record.document_urls || []}
+          clinicId={clinicId || ""}
           onDeleteFile={handleDeleteDocument}
           showActions={true}
           compact={false}

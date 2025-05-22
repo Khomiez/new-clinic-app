@@ -24,12 +24,8 @@ interface ClinicFilesParamsProps {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: ClinicFilesParamsProps
-) {
+export async function GET(request: NextRequest, { params }: any) {
   try {
-    // Await the params Promise in Next.js 15
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const patientId = searchParams.get('patientId');
@@ -68,21 +64,10 @@ export async function GET(
       );
     }
 
-    // Map resources to FileResponse with proper filename extraction
-    const files: FileResponse[] = filteredResources.map(resource => ({
-      id: resource.public_id,
-      url: resource.secure_url,
-      format: resource.format,
-      resourceType: resource.resource_type,
-      createdAt: resource.created_at,
-      originalFilename: getOriginalFilename(resource), // Use the fixed function
-      context: resource.context,
-      tags: resource.tags
-    }));
-
+    // Return the raw Cloudinary resources so FileList can process them
     return NextResponse.json({
       success: true,
-      files
+      files: filteredResources // Pass raw resources, not mapped ones
     });
   } catch (error) {
     console.error('Get clinic files error:', error);

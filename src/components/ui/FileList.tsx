@@ -1,11 +1,10 @@
-// src/components/ui/FileList.tsx - Fixed with proper filename display and simplified actions
+// STEP 1: Update your FileList component - src/components/ui/FileList.tsx
 "use client";
 
 import React, { useState } from "react";
 import { getOriginalFilename } from "@/utils/cloudinaryUploader";
 import PDFViewer from "./PDFViewer";
 
-// Updated FileInfo interface to match your needs
 interface FileInfo {
   url: string;
   filename: string;
@@ -45,28 +44,6 @@ function getFileIcon(filename: string): string {
   return '📄';
 }
 
-// Check if file can be viewed in browser
-function canPreviewFile(filename: string): boolean {
-  const name = filename.toLowerCase();
-  return name.endsWith('.pdf') || name.match(/\.(jpg|jpeg|png|gif|webp)$/) !== null;
-}
-
-// Format file size for display
-function formatFileSize(bytes?: number): string {
-  if (!bytes) return "";
-
-  const units = ["B", "KB", "MB", "GB"];
-  let size = bytes;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex++;
-  }
-
-  return `${size.toFixed(1)} ${units[unitIndex]}`;
-}
-
 // Extract filename from URL as fallback
 function extractFilenameFromUrl(url: string): string {
   try {
@@ -86,7 +63,7 @@ function extractFilenameFromUrl(url: string): string {
   }
 }
 
-// Normalize different file input types to a consistent format
+// THIS IS THE KEY FIX - Normalize different file input types
 function normalizeFileInfo(file: string | FileInfo | CloudinaryResource): FileInfo {
   if (typeof file === "string") {
     // String URL
@@ -96,27 +73,16 @@ function normalizeFileInfo(file: string | FileInfo | CloudinaryResource): FileIn
       type: "file",
     };
   } else if ("secure_url" in file) {
-    // Cloudinary resource
+    // Cloudinary resource - USE THE FIXED FUNCTION
     return {
       url: file.secure_url,
-      filename: getOriginalFilename(file), // Use the fixed function from cloudinaryUploader
+      filename: getOriginalFilename(file), // This will get the Thai filename from context
       type: file.resource_type === "image" ? "image" : "file",
     };
   } else {
     // FileInfo object
     return file;
   }
-}
-
-// Safe download with proper filename
-function downloadFile(url: string, filename: string): void {
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.target = "_blank"; // Open in new tab instead of download
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
 }
 
 export default function FileList({
@@ -134,12 +100,14 @@ export default function FileList({
   // Normalize all files to FileInfo objects
   const fileInfos = files.map(normalizeFileInfo);
 
-  const handlePDFView = (url: string, filename: string) => {
-    setPdfViewer({ isOpen: true, url, filename });
-  };
-
   const handleDownload = (url: string, filename: string) => {
-    downloadFile(url, filename);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (fileInfos.length === 0) {
@@ -152,7 +120,6 @@ export default function FileList({
 
   return (
     <>
-      {/* PDF Viewer Modal */}
       <PDFViewer
         url={pdfViewer.url}
         filename={pdfViewer.filename}
@@ -183,19 +150,12 @@ export default function FileList({
                   >
                     {file.filename}
                   </span>
-                  
-                  {!compact && file.size && (
-                    <span className="text-xs text-gray-500">
-                      {formatFileSize(file.size)}
-                    </span>
-                  )}
                 </div>
               </div>
 
               {/* Actions - Only Download and Delete */}
               {showActions && (
                 <div className="flex items-center space-x-2">
-                  {/* Download (Opens in new tab) */}
                   <button
                     onClick={() => handleDownload(file.url, file.filename)}
                     className={`bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition-colors ${
@@ -206,7 +166,6 @@ export default function FileList({
                     Download
                   </button>
 
-                  {/* Delete */}
                   {onDeleteFile && (
                     <button
                       onClick={() => onDeleteFile(file.url, index)}
@@ -227,3 +186,9 @@ export default function FileList({
     </>
   );
 }
+
+
+
+// STEP 3: Check how you're fetching and displaying files in your components
+// Make sure you're passing the raw Cloudinary resources to FileList component
+// The FileList component will then use getOriginalFilename() to display correct names
