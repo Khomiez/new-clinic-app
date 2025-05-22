@@ -1,8 +1,7 @@
-// src/components/ui/FileUploader.tsx - Enhanced for Thai language support
+// src/components/ui/FileUploader.tsx - Simplified file uploader
 "use client";
 
 import React, { useState, useRef } from "react";
-import { toIdString } from "@/utils/mongoHelpers";
 
 interface FileUploaderProps {
   clinicId: string;
@@ -10,180 +9,117 @@ interface FileUploaderProps {
   onUploadComplete: (fileUrl: string) => void;
   onUploadError?: (error: string) => void;
   onCancel?: () => void;
-  allowedTypes?: string; // e.g. "image/*,.pdf"
-  maxSizeMB?: number; // Max file size in MB
+  maxSizeMB?: number;
+  allowedTypes?: string;
 }
 
-const FileUploader: React.FC<FileUploaderProps> = ({
+export default function FileUploader({
   clinicId,
   patientId,
   onUploadComplete,
   onUploadError,
   onCancel,
-  allowedTypes = "image/*,.pdf,.doc,.docx,.xls,.xlsx",
   maxSizeMB = 10,
-}) => {
-  if (!clinicId) {
-    if (onUploadError) {
-      onUploadError("Clinic ID is required for file uploads");
-    }
-    return (
-      <div className="w-full bg-red-50 p-4 rounded border border-red-200">
-        <p className="text-red-600 text-sm">
-          Clinic ID is required for file uploads.
-        </p>
-        {onCancel && (
-          <button
-            onClick={onCancel}
-            className="mt-2 text-blue-600 text-sm hover:underline"
-          >
-            Cancel
-          </button>
-        )}
-      </div>
-    );
-  }
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [progress, setProgress] = useState<number>(0);
-  const [error, setError] = useState<string | null>(null);
-  const [abortController, setAbortController] =
-    useState<AbortController | null>(null);
+  allowedTypes = "image/*,.pdf,.doc,.docx,.xls,.xlsx"
+}: FileUploaderProps) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    setSelectedFile(file);
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
     // Validate file size
     if (file.size > maxSizeMB * 1024 * 1024) {
-      setError(`File size exceeds ${maxSizeMB}MB limit`);
-      if (onUploadError)
-        onUploadError(`File size exceeds ${maxSizeMB}MB limit`);
+      const error = `File size exceeds ${maxSizeMB}MB limit`;
+      onUploadError?.(error);
       return;
     }
 
-    // Auto-upload the file when selected
+    setSelectedFile(file);
     await uploadFile(file);
   };
 
   const uploadFile = async (file: File) => {
-    try {
-      setIsUploading(true);
-      setError(null);
-      setProgress(10);
+    setIsUploading(true);
+    setProgress(0);
 
-      // Create FormData
+    try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("clinicId", clinicId);
       if (patientId) formData.append("patientId", patientId);
 
-      // Add original filename explicitly (for Thai name preservation)
-      formData.append("originalFilename", file.name);
-      
-      // Create abort controller for cancellation
-      const controller = new AbortController();
-      setAbortController(controller);
-
-      // Simulating upload progress with timeout (in real implementation, use XMLHttpRequest for actual progress)
+      // Progress simulation
       const progressInterval = setInterval(() => {
-        setProgress((prev) => {
-          const newProgress = Math.min(prev + 5, 90);
-          return newProgress;
-        });
+        setProgress(prev => Math.min(prev + 10, 90));
       }, 200);
 
-      // Upload file
       const response = await fetch("/api/upload", {
         method: "POST",
         body: formData,
-        signal: controller.signal,
       });
 
       clearInterval(progressInterval);
+      setProgress(100);
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to upload file");
+        throw new Error(errorData.error || "Upload failed");
       }
 
-      setProgress(100);
-
       const data = await response.json();
-
-      if (data.success && data.file && data.file.url) {
+      if (data.success && data.file?.url) {
         onUploadComplete(data.file.url);
+        resetUploader();
       } else {
         throw new Error("Invalid response from server");
       }
-
-      // Reset the file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-      setSelectedFile(null);
-    } catch (err: any) {
-      // Check if this is an abort error
-      if (err.name === "AbortError") {
-        setError("Upload cancelled");
-        if (onUploadError) onUploadError("Upload cancelled");
-      } else {
-        setError(err.message || "Failed to upload file");
-        if (onUploadError)
-          onUploadError(err.message || "Failed to upload file");
-      }
+    } catch (error: any) {
+      onUploadError?.(error.message || "Upload failed");
     } finally {
       setIsUploading(false);
-      setAbortController(null);
+    }
+  };
+
+  const resetUploader = () => {
+    setSelectedFile(null);
+    setProgress(0);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
   const handleCancel = () => {
-    if (abortController) {
-      abortController.abort();
-      setAbortController(null);
-    }
-
-    // Reset states
-    setIsUploading(false);
-    setProgress(0);
-    setSelectedFile(null);
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-
-    if (onCancel) onCancel();
+    resetUploader();
+    onCancel?.();
   };
 
   return (
     <div className="w-full">
-      <div className="mb-2">
-        <label className="block mb-2 text-sm font-medium text-blue-700">
+      {/* Upload Area */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-blue-700 mb-2">
           Upload Document
         </label>
-
+        
         <div className="flex items-center justify-center w-full">
-          <label
-            className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer
-              ${
-                error
-                  ? "border-red-300 bg-red-50"
-                  : "border-blue-300 bg-blue-50 hover:bg-blue-100"
-              }
-              ${isUploading ? "opacity-50 pointer-events-none" : ""}
-            `}
-          >
+          <label className={`
+            flex flex-col items-center justify-center w-full h-32 
+            border-2 border-dashed rounded-lg cursor-pointer
+            ${isUploading 
+              ? "border-blue-300 bg-blue-50 opacity-50 pointer-events-none" 
+              : "border-blue-300 bg-blue-50 hover:bg-blue-100"
+            }
+          `}>
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <span className="text-3xl mb-2">📄</span>
+              
               {selectedFile ? (
                 <div className="text-center">
-                  <p className="mb-1 text-sm font-medium text-blue-700">
+                  <p className="text-sm font-medium text-blue-700">
                     {selectedFile.name}
                   </p>
                   <p className="text-xs text-blue-500">
@@ -192,41 +128,44 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 </div>
               ) : (
                 <>
-                  <p className="mb-2 text-sm text-blue-700">
-                    <span className="font-semibold">Click to upload</span> or drag
-                    and drop
+                  <p className="text-sm text-blue-700 mb-2">
+                    <span className="font-semibold">Click to upload</span> or drag and drop
                   </p>
                   <p className="text-xs text-blue-500">
-                    {allowedTypes.split(",").join(", ")} (Max: {maxSizeMB}MB)
+                    Max: {maxSizeMB}MB
                   </p>
                 </>
               )}
             </div>
+            
             <input
               ref={fileInputRef}
               type="file"
               className="hidden"
-              onChange={handleFileChange}
               accept={allowedTypes}
+              onChange={handleFileSelect}
               disabled={isUploading}
             />
           </label>
         </div>
       </div>
 
+      {/* Progress Bar */}
       {isUploading && (
-        <div className="mt-4">
-          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+        <div className="mb-4">
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
             <div
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-in-out"
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
-            ></div>
+            />
           </div>
-          <div className="flex justify-between items-center">
-            <p className="text-xs text-blue-700">Uploading... {progress}%</p>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-xs text-blue-700">
+              Uploading... {progress}%
+            </span>
             <button
               onClick={handleCancel}
-              className="text-xs text-red-600 hover:text-red-800 py-1 px-2 rounded"
+              className="text-xs text-red-600 hover:text-red-800"
             >
               Cancel
             </button>
@@ -234,13 +173,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         </div>
       )}
 
-      {error && (
-        <div className="text-sm text-red-600 mt-1 bg-red-50 p-2 rounded">
-          {error}
-        </div>
-      )}
+      {/* Action Buttons */}
+      <div className="flex justify-end space-x-2">
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="px-4 py-2 text-blue-600 hover:text-blue-800 transition"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
-};
-
-export default FileUploader;
+}
