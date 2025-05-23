@@ -1,4 +1,4 @@
-// src/components/ui/HistoryRecord.tsx - Fixed with simplified actions
+// src/components/ui/HistoryRecord.tsx - FIXED: Note editing and delete functionality
 "use client";
 
 import React, { useState } from "react";
@@ -16,6 +16,8 @@ interface HistoryRecordProps {
   onUpdateDate: (index: number, newDate: Date) => void;
   onAddDocument: (index: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
+  // NEW: Add proper note update handler
+  onUpdateNotes: (index: number, notes: string) => void;
 }
 
 export default function HistoryRecord({
@@ -27,6 +29,7 @@ export default function HistoryRecord({
   onUpdateDate,
   onAddDocument,
   onRemoveDocument,
+  onUpdateNotes, // NEW: Receive the update handler
 }: HistoryRecordProps) {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -50,8 +53,16 @@ export default function HistoryRecord({
     setIsEditingDate(false);
   };
 
+  // FIX: Proper notes saving functionality
   const handleNotesSubmit = () => {
-    // Update notes in the record (this would need parent component support)
+    // Call the parent component's update handler
+    onUpdateNotes(index, notesValue);
+    setIsEditingNotes(false);
+  };
+
+  // FIX: Reset notes value if user cancels
+  const handleCancelNotesEdit = () => {
+    setNotesValue(record.notes || "");
     setIsEditingNotes(false);
   };
 
@@ -68,10 +79,10 @@ export default function HistoryRecord({
     setIsAddingDocument(false);
   };
 
-  const handleDeleteDocument = (url: string, docIndex: number) => {
-    if (confirm("Are you sure you want to delete this document?")) {
-      onRemoveDocument(index, docIndex);
-    }
+  // FIX: Single confirmation for file deletion
+  const handleDeleteDocument = async (url: string, docIndex: number) => {
+    // REMOVED: Double confirmation - now single confirmation handled by EnhancedFileList
+    onRemoveDocument(index, docIndex);
   };
 
   return (
@@ -121,7 +132,7 @@ export default function HistoryRecord({
         </button>
       </div>
 
-      {/* Notes Section */}
+      {/* Notes Section - FIXED */}
       <div className="mb-4">
         <div className="flex items-center mb-2">
           <span className="text-blue-400 mr-1">📝</span>
@@ -147,7 +158,7 @@ export default function HistoryRecord({
             />
             <div className="flex justify-end mt-2 space-x-2">
               <button
-                onClick={() => setIsEditingNotes(false)}
+                onClick={handleCancelNotesEdit}
                 className="px-3 py-1 text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 text-sm"
               >
                 Cancel
@@ -201,7 +212,7 @@ export default function HistoryRecord({
           </div>
         )}
 
-        {/* Documents List - Fixed to use proper FileList component */}
+        {/* Documents List - FIXED: Remove double confirmation */}
         <EnhancedFileList
           fileUrls={record.document_urls || []}
           clinicId={clinicId || ""}

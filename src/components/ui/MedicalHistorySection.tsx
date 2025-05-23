@@ -1,4 +1,4 @@
-// src/components/ui/MedicalHistorySection.tsx - Simplified medical history management
+// src/components/ui/MedicalHistorySection.tsx - FIXED: Added note update handler
 "use client";
 
 import React, { useState } from "react";
@@ -100,6 +100,12 @@ export default function MedicalHistorySection({
     if (confirm("Are you sure you want to delete this medical record?")) {
       onRemoveRecord(index);
     }
+  };
+
+  // NEW: Handle note updates for existing records
+  const handleUpdateRecordNotes = (index: number, notes: string) => {
+    const updatedRecord = { ...historyRecords[index], notes };
+    onUpdateRecord(index, updatedRecord);
   };
 
   return (
@@ -239,6 +245,7 @@ export default function MedicalHistorySection({
               onUpdateDate={onUpdateRecordDate}
               onAddDocument={onAddDocument}
               onRemoveDocument={onRemoveDocument}
+              onUpdateNotes={handleUpdateRecordNotes} // NEW: Pass the note update handler
             />
           ))
         ) : !isAddingRecord ? (

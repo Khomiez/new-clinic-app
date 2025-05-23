@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - Simplified without useDocumentManager
+// src/app/(protected)/patients/edit/[id]/page.tsx - FIXED: Added note update handler integration
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -261,7 +261,7 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // Medical History handlers - Simplified without document manager
+  // Medical History handlers
   const handleAddRecord = (newRecord: IHistoryRecord) => {
     setPatient((prev) => {
       // Add the new record
@@ -358,26 +358,25 @@ export default function EditPatient({ params }: PageProps) {
   };
 
   const handleRemoveDocument = async (recordIndex: number, documentIndex: number) => {
-    if (confirm("Are you sure you want to delete this document?")) {
-      setPatient((prev) => {
-        if (!prev.history) return prev;
+    // FIXED: Remove extra confirmation since EnhancedFileList already handles it
+    setPatient((prev) => {
+      if (!prev.history) return prev;
 
-        const updatedHistory = [...prev.history];
-        const record = updatedHistory[recordIndex];
+      const updatedHistory = [...prev.history];
+      const record = updatedHistory[recordIndex];
 
-        if (!record || !record.document_urls) return prev;
+      if (!record || !record.document_urls) return prev;
 
-        updatedHistory[recordIndex] = {
-          ...record,
-          document_urls: record.document_urls.filter((_, i) => i !== documentIndex),
-        };
+      updatedHistory[recordIndex] = {
+        ...record,
+        document_urls: record.document_urls.filter((_, i) => i !== documentIndex),
+      };
 
-        return {
-          ...prev,
-          history: updatedHistory,
-        };
-      });
-    }
+      return {
+        ...prev,
+        history: updatedHistory,
+      };
+    });
   };
 
   // Show loading screen while resolving params or loading data

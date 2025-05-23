@@ -1,4 +1,4 @@
-// src/components/ui/EnhancedFileList.tsx - Enhanced with proper Thai filename support
+// src/components/ui/EnhancedFileList.tsx - FIXED: Single confirmation delete with proper API calls
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -20,7 +20,7 @@ interface CloudinaryResource {
   format: string;
   resource_type: string;
   created_at: string;
-  bytes?: number; // File size in bytes
+  bytes?: number;
   original_filename?: string;
   context?: {
     [key: string]: any;
@@ -82,6 +82,7 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
     url: string;
     filename: string;
   }>({ isOpen: false, url: "", filename: "" });
+  const [deletingUrls, setDeletingUrls] = useState<Set<string>>(new Set()); // Track deletion state
 
   useEffect(() => {
     const fetchFileMetadata = async () => {
@@ -198,18 +199,50 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
     }
   };
 
+  // FIXED: Single confirmation delete with proper API integration
   const handleDelete = async (url: string, index: number) => {
     if (!onDeleteFile) return;
 
     const filename = getOriginalFilename(cloudinaryResources[index]);
     
-    if (confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
-      try {
-        onDeleteFile(url, index);
-      } catch (error) {
-        console.error('Delete error:', error);
-        alert('Failed to delete file. Please try again.');
+    // FIXED: Single confirmation only
+    if (!confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    // Add URL to deleting set to show loading state
+    setDeletingUrls(prev => new Set(prev).add(url));
+
+    try {
+      console.log('Starting file deletion:', { url, filename, clinicId });
+      
+      // FIXED: Delete from Cloudinary via API first
+      const deleteResponse = await fetch(`/api/clinic/${clinicId}/files?url=${encodeURIComponent(url)}`, {
+        method: 'DELETE',
+      });
+
+      const deleteResult = await deleteResponse.json();
+      console.log('Delete API response:', deleteResult);
+
+      if (!deleteResult.success) {
+        throw new Error(deleteResult.error || 'Failed to delete file from storage');
       }
+
+      // FIXED: Only call parent handler after successful API deletion
+      onDeleteFile(url, index);
+      
+      console.log('File deletion successful');
+      
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      alert(`Failed to delete file: ${error.message || 'Unknown error'}`);
+    } finally {
+      // Remove URL from deleting set
+      setDeletingUrls(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(url);
+        return newSet;
+      });
     }
   };
 
@@ -259,12 +292,14 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
           const displayFilename = getOriginalFilename(resource);
           const canPreview = displayFilename.toLowerCase().endsWith('.pdf') || 
                            resource.resource_type === 'image';
+          const isDeleting = deletingUrls.has(resource.secure_url);
 
           console.log(`File ${index}:`, {
             url: resource.secure_url,
             context: resource.context,
             displayFilename,
-            canPreview
+            canPreview,
+            isDeleting
           });
 
           return (
@@ -274,12 +309,13 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                 flex items-center justify-between bg-white rounded-lg border border-blue-100 
                 hover:border-blue-300 transition-colors
                 ${compact ? "p-2" : "p-3"}
+                ${isDeleting ? "opacity-50" : ""}
               `}
               >
                 {/* File Info */}
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
                   <span className={compact ? "text-lg" : "text-xl"}>
-                    {getFileIcon(displayFilename)}
+                    {isDeleting ? "⏳" : getFileIcon(displayFilename)}
                   </span>
 
                   <div className="flex-1 min-w-0">
@@ -303,6 +339,12 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                       )}
                       <span>•</span>
                       <span>{new Date(resource.created_at).toLocaleDateString('th-TH')}</span>
+                      {isDeleting && (
+                        <>
+                          <span>•</span>
+                          <span className="text-red-500">Deleting...</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -310,7 +352,7 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                 {/* Actions */}
                 {showActions && (
                   <div className="flex items-center space-x-2">
-                    {canPreview && (
+                    {canPreview && !isDeleting && (
                       <button
                         onClick={() => handleView(resource.secure_url, displayFilename)}
                         className={`bg-green-100 text-green-600 px-2 py-1 rounded hover:bg-green-200 transition-colors ${
@@ -322,25 +364,28 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                       </button>
                     )}
                     
-                    <button
-                      onClick={() => handleDownload(resource.secure_url, displayFilename)}
-                      className={`bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition-colors ${
-                        compact ? "text-xs" : "text-sm"
-                      }`}
-                      title="Download file"
-                    >
-                      Download
-                    </button>
+                    {!isDeleting && (
+                      <button
+                        onClick={() => handleDownload(resource.secure_url, displayFilename)}
+                        className={`bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition-colors ${
+                          compact ? "text-xs" : "text-sm"
+                        }`}
+                        title="Download file"
+                      >
+                        Download
+                      </button>
+                    )}
 
                     {onDeleteFile && (
                       <button
                         onClick={() => handleDelete(resource.secure_url, index)}
-                        className={`bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 transition-colors ${
+                        disabled={isDeleting}
+                        className={`bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                           compact ? "text-xs" : "text-sm"
                         }`}
-                        title="Delete file"
+                        title={isDeleting ? "Deleting..." : "Delete file"}
                       >
-                        Delete
+                        {isDeleting ? "Deleting..." : "Delete"}
                       </button>
                     )}
                   </div>
