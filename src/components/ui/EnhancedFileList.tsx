@@ -1,4 +1,4 @@
-// src/components/ui/EnhancedFileList.tsx - NEW FILE
+// src/components/ui/EnhancedFileList.tsx - Enhanced with proper Thai filename support
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -11,6 +11,7 @@ interface EnhancedFileListProps {
   onDeleteFile?: (url: string, index: number) => void;
   showActions?: boolean;
   compact?: boolean;
+  patientId?: string;
 }
 
 interface CloudinaryResource {
@@ -19,9 +20,10 @@ interface CloudinaryResource {
   format: string;
   resource_type: string;
   created_at: string;
+  bytes?: number; // File size in bytes
   original_filename?: string;
   context?: {
-    [key: string]: string;
+    [key: string]: any;
   };
   tags?: string[];
 }
@@ -37,18 +39,27 @@ function getFileIcon(filename: string): string {
   return "📄";
 }
 
+// Format file size for display
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 // Extract filename from URL as fallback
 function extractFilenameFromUrl(url: string): string {
   try {
     const urlParts = url.split("/");
     let filename = urlParts[urlParts.length - 1].split("?")[0];
-
+    
     try {
       filename = decodeURIComponent(filename);
     } catch {
       // If decoding fails, use as-is
     }
-
+    
     return filename || "Document";
   } catch {
     return "Document";
@@ -61,11 +72,11 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
   onDeleteFile,
   showActions = true,
   compact = false,
+  patientId,
 }) => {
-  const [cloudinaryResources, setCloudinaryResources] = useState<
-    CloudinaryResource[]
-  >([]);
+  const [cloudinaryResources, setCloudinaryResources] = useState<CloudinaryResource[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [pdfViewer, setPdfViewer] = useState<{
     isOpen: boolean;
     url: string;
@@ -83,8 +94,13 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
         console.log("Fetching metadata for clinic:", clinicId);
         console.log("File URLs:", fileUrls);
 
-        // Get all clinic resources from your API
-        const response = await fetch(`/api/clinic/${clinicId}/files`);
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        if (patientId) {
+          queryParams.append('patientId', patientId);
+        }
+
+        const response = await fetch(`/api/clinic/${clinicId}/files?${queryParams.toString()}`);
         const data = await response.json();
 
         console.log("API response:", data);
@@ -101,14 +117,16 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
               return resource;
             } else {
               console.log("No resource found for URL:", url, "using fallback");
-              // Fallback for URLs without metadata
+              // Create fallback resource
               return {
                 public_id: `fallback_${Date.now()}`,
                 secure_url: url,
                 format: "unknown",
                 resource_type: "auto",
                 created_at: new Date().toISOString(),
-                context: {},
+                context: {
+                  original_filename: extractFilenameFromUrl(url)
+                },
               } as CloudinaryResource;
             }
           });
@@ -124,7 +142,9 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                 format: "unknown",
                 resource_type: "auto",
                 created_at: new Date().toISOString(),
-                context: {},
+                context: {
+                  original_filename: extractFilenameFromUrl(url)
+                },
               } as CloudinaryResource)
           );
 
@@ -132,6 +152,7 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
         }
       } catch (error) {
         console.error("Error fetching file metadata:", error);
+        setError("Failed to load file information");
 
         // Fallback: create basic resources from URLs
         const fallbackResources = fileUrls.map(
@@ -142,7 +163,9 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
               format: "unknown",
               resource_type: "auto",
               created_at: new Date().toISOString(),
-              context: {},
+              context: {
+                original_filename: extractFilenameFromUrl(url)
+              },
             } as CloudinaryResource)
         );
 
@@ -153,7 +176,7 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
     };
 
     fetchFileMetadata();
-  }, [fileUrls, clinicId]);
+  }, [fileUrls, clinicId, patientId]);
 
   const handleDownload = (url: string, filename: string) => {
     const link = document.createElement("a");
@@ -165,12 +188,48 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
     document.body.removeChild(link);
   };
 
+  const handleView = (url: string, filename: string) => {
+    // Only show PDF viewer for PDF files
+    if (filename.toLowerCase().endsWith('.pdf')) {
+      setPdfViewer({ isOpen: true, url, filename });
+    } else {
+      // For other files, open in new tab
+      window.open(url, '_blank');
+    }
+  };
+
+  const handleDelete = async (url: string, index: number) => {
+    if (!onDeleteFile) return;
+
+    const filename = getOriginalFilename(cloudinaryResources[index]);
+    
+    if (confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
+      try {
+        onDeleteFile(url, index);
+      } catch (error) {
+        console.error('Delete error:', error);
+        alert('Failed to delete file. Please try again.');
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-blue-50 p-3 rounded-lg text-center">
         <div className="flex items-center justify-center space-x-2">
           <span className="animate-spin">⏳</span>
           <span className="text-blue-600 text-sm">Loading files...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 p-3 rounded-lg text-center border border-red-200">
+        <div className="flex items-center justify-center space-x-2">
+          <span className="text-red-500">⚠️</span>
+          <span className="text-red-600 text-sm">{error}</span>
         </div>
       </div>
     );
@@ -196,13 +255,16 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
 
       <div className="space-y-2">
         {cloudinaryResources.map((resource, index) => {
-          // THIS IS THE KEY: Use getOriginalFilename to get Thai filename
+          // Use the enhanced getOriginalFilename function
           const displayFilename = getOriginalFilename(resource);
+          const canPreview = displayFilename.toLowerCase().endsWith('.pdf') || 
+                           resource.resource_type === 'image';
 
           console.log(`File ${index}:`, {
             url: resource.secure_url,
             context: resource.context,
             displayFilename,
+            canPreview
           });
 
           return (
@@ -229,27 +291,50 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                     >
                       {displayFilename}
                     </span>
+                    
+                    {/* File metadata */}
+                    <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+                      <span>{resource.format?.toUpperCase() || 'FILE'}</span>
+                      {resource.bytes && (
+                        <>
+                          <span>•</span>
+                          <span>{formatFileSize(resource.bytes)}</span>
+                        </>
+                      )}
+                      <span>•</span>
+                      <span>{new Date(resource.created_at).toLocaleDateString('th-TH')}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Actions - Only Download and Delete */}
+                {/* Actions */}
                 {showActions && (
                   <div className="flex items-center space-x-2">
+                    {canPreview && (
+                      <button
+                        onClick={() => handleView(resource.secure_url, displayFilename)}
+                        className={`bg-green-100 text-green-600 px-2 py-1 rounded hover:bg-green-200 transition-colors ${
+                          compact ? "text-xs" : "text-sm"
+                        }`}
+                        title="View file"
+                      >
+                        View
+                      </button>
+                    )}
+                    
                     <button
-                      onClick={() =>
-                        handleDownload(resource.secure_url, displayFilename)
-                      }
+                      onClick={() => handleDownload(resource.secure_url, displayFilename)}
                       className={`bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition-colors ${
                         compact ? "text-xs" : "text-sm"
                       }`}
-                      title="Download / Open in new tab"
+                      title="Download file"
                     >
                       Download
                     </button>
 
                     {onDeleteFile && (
                       <button
-                        onClick={() => onDeleteFile(resource.secure_url, index)}
+                        onClick={() => handleDelete(resource.secure_url, index)}
                         className={`bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 transition-colors ${
                           compact ? "text-xs" : "text-sm"
                         }`}

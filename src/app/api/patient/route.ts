@@ -1,10 +1,11 @@
-// src/app/api/patient/route.ts - Fixed with better error handling for dynamic models
+// src/app/api/patient/route.ts - Updated DELETE method with Cloudinary integration
 import { dbConnect } from "@/db";
 import PatientSchema from "@/models/Patient";
 import mongoose, { isValidObjectId, Model } from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import { buildPaginationQuery, createPaginatedResponse } from "@/utils/paginationHelpers";
 import { PaginationParams } from "@/interfaces/IPagination";
+import { batchDeleteFromCloudinary, extractPublicIdFromUrl } from "@/utils/cloudinaryUploader";
 
 // Define the Patient interface to match the schema
 interface IPatientDocument extends mongoose.Document {
@@ -142,7 +143,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// src/app/api/patient/route.ts - Update in the POST function
 export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -243,7 +243,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// src/app/api/patient/route.ts - Update in the PATCH function
 export async function PATCH(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -360,6 +359,13 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    console.log('Deleting patient:', {
+      patientId,
+      name: patient.name,
+      HN_code: patient.HN_code,
+      historyCount: patient.history?.length || 0
+    });
+
     // Collect all document URLs from medical history
     const documentUrls: string[] = [];
     if (patient.history) {
@@ -370,85 +376,74 @@ export async function DELETE(request: NextRequest) {
       });
     }
 
-    // Delete patient from database
-    const result = await Patient.findByIdAndDelete(patientId).exec();
+    console.log('Found documents to delete:', {
+      totalDocuments: documentUrls.length,
+      urls: documentUrls
+    });
 
-    // If database deletion successful, clean up files
+    // Delete patient from database first
+    await Patient.findByIdAndDelete(patientId).exec();
+    console.log('Patient deleted from database');
+
+    // If there are documents to delete, clean them up from Cloudinary
     if (documentUrls.length > 0) {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/upload/batch-delete`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls: documentUrls })
-        });
+        // Extract public IDs from URLs
+        const publicIds = documentUrls
+          .map(url => extractPublicIdFromUrl(url))
+          .filter(id => id !== null) as string[];
 
-        const cleanupResult = await response.json();
-        
-        if (!cleanupResult.success) {
-          console.warn('Some files could not be deleted from storage:', cleanupResult);
+        console.log('Extracted public IDs for deletion:', publicIds);
+
+        if (publicIds.length > 0) {
+          const cleanupResult = await batchDeleteFromCloudinary(publicIds);
           
-          // If not forced delete and file cleanup failed, restore patient
-          if (!forceDelete) {
-            try {
-              await Patient.create(patient);
-              return NextResponse.json(
-                { 
-                  success: false, 
-                  error: "Failed to delete associated files. Patient not deleted.", 
-                  filesNotDeleted: documentUrls.length 
-                },
-                { status: 500 }
-              );
-            } catch (restoreError) {
-              console.error('Failed to restore patient after failed file cleanup:', restoreError);
-              return NextResponse.json(
-                { 
-                  success: false, 
-                  error: "Critical error: Patient deleted but files remain and restoration failed", 
-                  filesNotDeleted: documentUrls.length 
-                },
-                { status: 500 }
-              );
+          console.log('Cloudinary cleanup result:', cleanupResult);
+
+          if (!cleanupResult.success || cleanupResult.failed.length > 0) {
+            const failedCount = cleanupResult.failed.length;
+            const successCount = cleanupResult.deleted.length;
+            
+            console.warn('Some files could not be deleted from Cloudinary:', {
+              successful: successCount,
+              failed: failedCount,
+              failedFiles: cleanupResult.failed
+            });
+            
+            // If not forced delete and some files failed, we already deleted from DB
+            // so we'll just warn but continue (patient is already deleted)
+            if (!forceDelete && failedCount > 0) {
+              return NextResponse.json({
+                success: true,
+                message: `Patient deleted successfully, but ${failedCount} file(s) could not be removed from storage`,
+                filesDeleted: successCount,
+                filesNotDeleted: failedCount,
+                warning: "Some files may remain in cloud storage"
+              });
             }
           }
         }
       } catch (error) {
-        console.error('Error during file cleanup:', error);
+        console.error('Error during Cloudinary cleanup:', error);
         
-        // If not forced and file cleanup threw error, restore patient
-        if (!forceDelete) {
-          try {
-            await Patient.create(patient);
-            return NextResponse.json(
-              { 
-                success: false, 
-                error: "File cleanup failed. Patient not deleted.", 
-                filesCount: documentUrls.length 
-              },
-              { status: 500 }
-            );
-          } catch (restoreError) {
-            console.error('Failed to restore patient after error:', restoreError);
-            return NextResponse.json(
-              { 
-                success: false, 
-                error: "Critical error: Patient deleted but file cleanup failed and restoration failed", 
-                filesCount: documentUrls.length 
-              },
-              { status: 500 }
-            );
-          }
-        }
+        // Patient is already deleted from DB, so we'll return success with warning
+        return NextResponse.json({
+          success: true,
+          message: "Patient deleted successfully, but file cleanup encountered errors",
+          filesDeleted: 0,
+          filesNotDeleted: documentUrls.length,
+          warning: "Files may remain in cloud storage due to cleanup error",
+          cleanupError: error instanceof Error ? error.message : "Unknown cleanup error"
+        });
       }
     }
 
-    return NextResponse.json(
-      { 
-        success: true, 
-        message: "Patient deleted successfully",
-        filesDeleted: documentUrls.length
-      }
-    );
+    return NextResponse.json({
+      success: true,
+      message: "Patient deleted successfully",
+      filesDeleted: documentUrls.length,
+      filesNotDeleted: 0
+    });
   } catch (error) {
     console.error("DELETE patient error:", error);
     return NextResponse.json(

@@ -1,5 +1,6 @@
-// src/utils/cloudinaryUploader.ts - Complete file with fixed Thai filename handling
+// src/utils/cloudinaryUploader.ts - Enhanced with proper Thai filename preservation
 import { v2 as cloudinary } from "cloudinary";
+import { checkCloudinaryConfig } from "./cloudinaryConfig";
 
 cloudinary.config({
   secure: true,
@@ -29,7 +30,7 @@ interface CloudinaryResource {
   created_at: string;
   original_filename?: string;
   context?: {
-    [key: string]: any; // Changed to 'any' to allow nested objects
+    [key: string]: any;
   };
   tags?: string[];
 }
@@ -41,102 +42,77 @@ interface GetResourcesResult {
 }
 
 /**
- * Get original filename from Cloudinary resource with better fallback logic
+ * Create safe folder name while preserving original for context
+ */
+function createSafeClinicFolderName(clinicName: string): string {
+  // For folder names, we need ASCII-safe characters
+  // But we'll preserve the original Thai name in context
+  return clinicName
+    .toLowerCase()
+    .replace(/[^a-z0-9ก-๙\u0E00-\u0E7F]/g, "_") // Allow Thai characters but replace special chars
+    .replace(/_{2,}/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+/**
+ * Create safe filename for Cloudinary public_id while preserving original
+ */
+function createSafePublicId(filename: string): string {
+  const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+  return nameWithoutExt
+    .replace(/[^a-zA-Z0-9.-_ก-๙\u0E00-\u0E7F]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+/**
+ * Get original filename from Cloudinary resource
  */
 export function getOriginalFilename(resource: CloudinaryResource): string {
-  console.log('Getting filename for resource:', {
-    public_id: resource.public_id,
-    context: resource.context,
-    original_filename: resource.original_filename,
-    format: resource.format
-  });
-
-  // Priority 1: Original filename from context string (Cloudinary format: key1=value1|key2=value2)
-  if (resource.context && typeof resource.context === 'object') {
-    // Handle object-style context
-    if (resource.context.original_filename) {
-      console.log('Found filename in context object:', resource.context.original_filename);
-      return resource.context.original_filename;
-    }
-    
-    // Handle custom nested object
-    if (resource.context.custom?.original_filename) {
-      console.log('Found filename in context.custom:', resource.context.custom.original_filename);
-      return resource.context.custom.original_filename;
-    }
+  // Priority 1: Context contains original filename
+  if (resource.context?.original_filename) {
+    return resource.context.original_filename;
   }
-
+  
   // Priority 2: Parse context string format (key1=value1|key2=value2)
   if (resource.context && typeof resource.context === 'string') {
-    const contextPairs = (resource.context as string).split('|');
+    const contextStr = resource.context as string;
+    const contextPairs = contextStr.split('|');
     for (const pair of contextPairs) {
       const [key, value] = pair.split('=');
       if (key === 'original_filename' && value) {
-        console.log('Found filename in context string:', value);
         return decodeURIComponent(value);
       }
     }
   }
   
-  // Priority 3: Original filename property from Cloudinary
-  if (resource.original_filename) {
-    console.log('Found filename in original_filename property:', resource.original_filename);
-    return resource.original_filename;
-  }
-  
-  // Priority 4: Check tags for filename
+  // Priority 3: Check tags for filename
   if (resource.tags && resource.tags.length > 0) {
     for (const tag of resource.tags) {
       if (tag.startsWith('filename:')) {
-        const extractedName = tag.substring(9); // Remove 'filename:' prefix
-        if (extractedName) {
-          console.log('Found filename in tags:', extractedName);
-          return extractedName;
-        }
+        return tag.substring(9);
       }
     }
   }
   
-  // Priority 5: Try to extract meaningful name from public_id
+  // Priority 4: Use original_filename property
+  if (resource.original_filename) {
+    return resource.original_filename;
+  }
+  
+  // Priority 5: Extract from public_id
   if (resource.public_id) {
     const parts = resource.public_id.split('/');
     const lastPart = parts[parts.length - 1];
+    const cleanName = lastPart.replace(/_\d+$/, ''); // Remove timestamp suffix
     
-    // Remove timestamp suffix if present (_1234567890)
-    const cleanName = lastPart.replace(/_\d+$/, '');
-    
-    console.log('Extracting from public_id:', {
-      public_id: resource.public_id,
-      lastPart,
-      cleanName
-    });
-    
-    if (cleanName && cleanName !== 'document' && cleanName.length > 1) {
-      const filename = cleanName + (resource.format ? `.${resource.format}` : '');
-      console.log('Extracted filename from public_id:', filename);
-      return filename;
+    if (cleanName && cleanName !== 'document') {
+      return cleanName + (resource.format ? `.${resource.format}` : '');
     }
   }
   
-  // Priority 6: Fallback - Create descriptive name based on type and format
-  const fallbackName = `Document.${resource.format || 'file'}`;
-  console.log('Using fallback name:', fallbackName);
-  return fallbackName;
-}
-
-/**
- * Create safe filename for Cloudinary public_id (ASCII only)
- * While preserving original filename in context
- */
-function createSafePublicId(filename: string): string {
-  // Remove file extension for public_id
-  const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
-  
-  // Create safe version for public_id (ASCII only)
-  return nameWithoutExt
-    .replace(/[^a-zA-Z0-9.-_]/g, '_')
-    .replace(/_{2,}/g, '_')
-    .replace(/^_|_$/g, '');
+  // Fallback
+  return `Document.${resource.format || 'file'}`;
 }
 
 /**
@@ -147,40 +123,53 @@ export async function uploadToCloudinary(
   options: UploadOptions
 ): Promise<UploadResult> {
   try {
+    checkCloudinaryConfig();
+    
     const { clinicId, clinicName, filename = 'document', fileType, patientId } = options;
     
-    // Create folder structure with safe names
-    const sanitizedClinicName = clinicName.toLowerCase().replace(/[^a-z0-9]/g, "_");
-    const folder = `clinic_management/${sanitizedClinicName}`;
+    // Create folder structure: clinic_management/clinic_name/
+    const safeClinicName = createSafeClinicFolderName(clinicName);
+    const folder = `clinic_management/${safeClinicName}`;
     
-    // Create unique public ID with safe characters only
+    // Create unique public ID with safe characters
     const timestamp = Date.now();
     const safeFilename = createSafePublicId(filename);
-    const publicId = `${folder}/${patientId || "general"}/${safeFilename}_${timestamp}`;
+    const publicId = `${folder}/${safeFilename}_${timestamp}`;
 
     // Convert buffer to base64
     const base64File = `data:${fileType || "application/octet-stream"};base64,${file.toString("base64")}`;
 
-    console.log('Uploading with original filename:', filename);
+    console.log('Uploading to Cloudinary:', {
+      folder,
+      publicId,
+      originalFilename: filename,
+      clinicName
+    });
 
-    // Upload to Cloudinary with original filename preserved in context
+    // Upload to Cloudinary with comprehensive metadata
     const result = await cloudinary.uploader.upload(base64File, {
       public_id: publicId,
       resource_type: "auto",
-      // Simplified context structure to avoid TypeScript issues
-      context: `clinic_id=${clinicId}|patient_id=${patientId || "general"}|original_filename=${filename}|upload_timestamp=${new Date().toISOString()}|clinic_name=${clinicName}`,
+      context: {
+        clinic_id: clinicId,
+        clinic_name: clinicName,
+        original_filename: filename,
+        patient_id: patientId || "general",
+        upload_timestamp: new Date().toISOString(),
+      },
       tags: [
         `clinic_${clinicId}`,
         "patient_documents",
         patientId ? `patient_${patientId}` : "general",
-        `filename:${filename}` // Also store as tag for backup
+        `filename:${filename}`,
+        "clinic_management"
       ],
     });
 
-    console.log('Upload successful, result:', {
+    console.log('Upload successful:', {
       url: result.secure_url,
       public_id: result.public_id,
-      originalFilename: filename
+      original_filename: filename
     });
 
     return {
@@ -203,6 +192,8 @@ export async function uploadToCloudinary(
  */
 export async function deleteFromCloudinary(publicId: string): Promise<UploadResult> {
   try {
+    checkCloudinaryConfig();
+    
     const result = await cloudinary.uploader.destroy(publicId);
     
     if (result.result === "ok") {
@@ -223,22 +214,24 @@ export async function deleteFromCloudinary(publicId: string): Promise<UploadResu
 }
 
 /**
- * Get all resources for a clinic with proper filename extraction
+ * Get all resources for a clinic
  */
 export async function getClinicResources(
   clinicId: string, 
   clinicName: string
 ): Promise<GetResourcesResult> {
   try {
-    const sanitizedClinicName = clinicName.toLowerCase().replace(/[^a-z0-9]/g, "_");
-    const folderPrefix = `clinic_management/${sanitizedClinicName}`;
+    checkCloudinaryConfig();
+    
+    const safeClinicName = createSafeClinicFolderName(clinicName);
+    const folderPrefix = `clinic_management/${safeClinicName}`;
 
     const result = await cloudinary.api.resources({
       type: 'upload',
       prefix: folderPrefix,
       max_results: 500,
-      context: true, // Include context data (important for original_filename)
-      tags: true,    // Include tags
+      context: true,
+      tags: true,
     });
 
     return {
@@ -259,7 +252,8 @@ export async function getClinicResources(
  */
 export function extractPublicIdFromUrl(url: string): string | null {
   try {
-    const match = url.match(/\/v\d+\/(.+)\.[^/?]+/);
+    // Match pattern: https://res.cloudinary.com/{cloud_name}/{resource_type}/upload/v{version}/{public_id}.{format}
+    const match = url.match(/\/v\d+\/(.+?)\.[^/?]+/);
     return match ? match[1] : null;
   } catch {
     return null;
@@ -276,6 +270,8 @@ export async function batchDeleteFromCloudinary(publicIds: string[]): Promise<{
   error?: string;
 }> {
   try {
+    checkCloudinaryConfig();
+    
     if (publicIds.length === 0) {
       return { success: true, deleted: [], failed: [] };
     }
@@ -305,64 +301,6 @@ export async function batchDeleteFromCloudinary(publicIds: string[]): Promise<{
       deleted: [],
       failed: publicIds,
       error: error.message || "Batch delete failed",
-    };
-  }
-}
-
-/**
- * Update file context (useful for updating metadata of existing files)
- */
-export async function updateFileContext(
-  publicId: string,
-  context: Record<string, string>
-): Promise<UploadResult> {
-  try {
-    // Convert context object to Cloudinary's string format
-    const contextString = Object.entries(context)
-      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-      .join('|');
-    
-    // Use the correct Cloudinary API method for updating context
-    const result = await cloudinary.api.update(publicId, {
-      context: contextString
-    });
-    
-    return {
-      success: true,
-      public_id: publicId,
-    };
-  } catch (error: any) {
-    console.error("Update context error:", error);
-    return {
-      success: false,
-      error: error.message || "Failed to update context",
-    };
-  }
-}
-
-/**
- * Get file info by public ID
- */
-export async function getFileInfo(publicId: string): Promise<{
-  success: boolean;
-  resource?: CloudinaryResource;
-  error?: string;
-}> {
-  try {
-    const result = await cloudinary.api.resource(publicId, {
-      context: true,
-      tags: true,
-    });
-    
-    return {
-      success: true,
-      resource: result,
-    };
-  } catch (error: any) {
-    console.error("Get file info error:", error);
-    return {
-      success: false,
-      error: error.message || "Failed to get file info",
     };
   }
 }
