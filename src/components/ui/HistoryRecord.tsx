@@ -1,4 +1,4 @@
-// src/components/ui/HistoryRecord.tsx - FIXED: Note editing and delete functionality
+// src/components/ui/HistoryRecord.tsx - FIXED: Local deletion marking only
 "use client";
 
 import React, { useState } from "react";
@@ -16,8 +16,9 @@ interface HistoryRecordProps {
   onUpdateDate: (index: number, newDate: Date) => void;
   onAddDocument: (index: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
-  // NEW: Add proper note update handler
   onUpdateNotes: (index: number, notes: string) => void;
+  // NEW: Optional prop to show pending deletions for this record
+  pendingDeletions?: string[];
 }
 
 export default function HistoryRecord({
@@ -29,7 +30,8 @@ export default function HistoryRecord({
   onUpdateDate,
   onAddDocument,
   onRemoveDocument,
-  onUpdateNotes, // NEW: Receive the update handler
+  onUpdateNotes,
+  pendingDeletions = [], // NEW: Track pending deletions
 }: HistoryRecordProps) {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -53,14 +55,14 @@ export default function HistoryRecord({
     setIsEditingDate(false);
   };
 
-  // FIX: Proper notes saving functionality
+  // Proper notes saving functionality
   const handleNotesSubmit = () => {
     // Call the parent component's update handler
     onUpdateNotes(index, notesValue);
     setIsEditingNotes(false);
   };
 
-  // FIX: Reset notes value if user cancels
+  // Reset notes value if user cancels
   const handleCancelNotesEdit = () => {
     setNotesValue(record.notes || "");
     setIsEditingNotes(false);
@@ -79,9 +81,15 @@ export default function HistoryRecord({
     setIsAddingDocument(false);
   };
 
-  // FIX: Single confirmation for file deletion
-  const handleDeleteDocument = async (url: string, docIndex: number) => {
-    // REMOVED: Double confirmation - now single confirmation handled by EnhancedFileList
+  // FIXED: Only marks for local deletion, no immediate Cloudinary deletion
+  const handleDeleteDocument = (url: string, docIndex: number) => {
+    console.log('HistoryRecord: Marking document for deletion:', {
+      recordIndex: index,
+      documentIndex: docIndex,
+      url
+    });
+    
+    // Simply call parent handler - no confirmation needed as EnhancedFileList handles it
     onRemoveDocument(index, docIndex);
   };
 
@@ -132,7 +140,7 @@ export default function HistoryRecord({
         </button>
       </div>
 
-      {/* Notes Section - FIXED */}
+      {/* Notes Section */}
       <div className="mb-4">
         <div className="flex items-center mb-2">
           <span className="text-blue-400 mr-1">📝</span>
@@ -190,6 +198,12 @@ export default function HistoryRecord({
           <div className="flex items-center">
             <span className="text-blue-400 mr-1">📁</span>
             <h4 className="font-medium text-blue-600">Documents</h4>
+            {/* NEW: Show pending deletion count for this record */}
+            {pendingDeletions.length > 0 && (
+              <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">
+                {pendingDeletions.length} pending deletion
+              </span>
+            )}
           </div>
           <button
             onClick={handleAddDocumentClick}
@@ -212,13 +226,14 @@ export default function HistoryRecord({
           </div>
         )}
 
-        {/* Documents List - FIXED: Remove double confirmation */}
+        {/* Documents List - FIXED: Pass pending deletions and no immediate Cloudinary deletion */}
         <EnhancedFileList
           fileUrls={record.document_urls || []}
           clinicId={clinicId || ""}
           onDeleteFile={handleDeleteDocument}
           showActions={true}
           compact={false}
+          pendingDeletions={pendingDeletions} // NEW: Pass pending deletion URLs
         />
       </div>
     </div>

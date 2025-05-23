@@ -1,4 +1,4 @@
-// src/components/ui/MedicalHistorySection.tsx - FIXED: Added note update handler
+// src/components/ui/MedicalHistorySection.tsx - FIXED: Pass pending deletions to child components
 "use client";
 
 import React, { useState } from "react";
@@ -17,6 +17,13 @@ interface MedicalHistorySectionProps {
   onUpdateRecordDate: (index: number, newDate: Date) => void;
   onAddDocument: (recordIndex: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
+  // NEW: Optional prop to receive pending deletions from parent
+  pendingFileDeletions?: Array<{
+    recordIndex: number;
+    documentIndex: number;
+    url: string;
+    filename: string;
+  }>;
 }
 
 export default function MedicalHistorySection({
@@ -29,6 +36,7 @@ export default function MedicalHistorySection({
   onUpdateRecordDate,
   onAddDocument,
   onRemoveDocument,
+  pendingFileDeletions = [], // NEW: Receive pending deletions
 }: MedicalHistorySectionProps) {
   const [isAddingRecord, setIsAddingRecord] = useState(false);
   const [isAddingDocument, setIsAddingDocument] = useState(false);
@@ -102,18 +110,33 @@ export default function MedicalHistorySection({
     }
   };
 
-  // NEW: Handle note updates for existing records
+  // Handle note updates for existing records
   const handleUpdateRecordNotes = (index: number, notes: string) => {
     const updatedRecord = { ...historyRecords[index], notes };
     onUpdateRecord(index, updatedRecord);
   };
 
+  // NEW: Helper function to get pending deletions for a specific record
+  const getPendingDeletionsForRecord = (recordIndex: number): string[] => {
+    return pendingFileDeletions
+      .filter(deletion => deletion.recordIndex === recordIndex)
+      .map(deletion => deletion.url);
+  };
+
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl text-blue-700 font-medium flex items-center gap-2">
-          <span>📁</span> ประวัติการรักษาพยาบาล
-        </h2>
+        <div>
+          <h2 className="text-xl text-blue-700 font-medium flex items-center gap-2">
+            <span>📁</span> ประวัติการรักษาพยาบาล
+          </h2>
+          {/* NEW: Show overall pending deletion summary */}
+          {pendingFileDeletions.length > 0 && (
+            <p className="text-sm text-orange-600 mt-1">
+              {pendingFileDeletions.length} file(s) marked for deletion
+            </p>
+          )}
+        </div>
         <button
           onClick={() => setIsAddingRecord(true)}
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center gap-1"
@@ -245,7 +268,8 @@ export default function MedicalHistorySection({
               onUpdateDate={onUpdateRecordDate}
               onAddDocument={onAddDocument}
               onRemoveDocument={onRemoveDocument}
-              onUpdateNotes={handleUpdateRecordNotes} // NEW: Pass the note update handler
+              onUpdateNotes={handleUpdateRecordNotes}
+              pendingDeletions={getPendingDeletionsForRecord(index)} // NEW: Pass record-specific pending deletions
             />
           ))
         ) : !isAddingRecord ? (

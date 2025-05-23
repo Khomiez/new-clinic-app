@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - FIXED: Added note update handler integration
+// src/app/(protected)/patients/edit/[id]/page.tsx - FIXED: Proper file deletion flow
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -26,6 +26,14 @@ import { toIdString } from "@/utils/mongoHelpers";
 // Fix type for Next.js 15 - params is now a Promise
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+// NEW: Interface for tracking pending file deletions
+interface PendingFileDeletion {
+  recordIndex: number;
+  documentIndex: number;
+  url: string;
+  filename: string;
 }
 
 export default function EditPatient({ params }: PageProps) {
@@ -60,6 +68,9 @@ export default function EditPatient({ params }: PageProps) {
   const [originalPatient, setOriginalPatient] = useState<Partial<IPatient> | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // NEW: State for tracking pending file deletions
+  const [pendingFileDeletions, setPendingFileDeletions] = useState<PendingFileDeletion[]>([]);
 
   // State for clinics
   const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(undefined);
@@ -142,16 +153,20 @@ export default function EditPatient({ params }: PageProps) {
       setPatient(patientData);
       setOriginalPatient(JSON.parse(JSON.stringify(patientData))); // Deep copy
       setHasUnsavedChanges(false);
+      
+      // NEW: Clear pending deletions when loading fresh data
+      setPendingFileDeletions([]);
     }
   }, [patientFromStore, patientLoading]);
 
-  // Check for unsaved changes
+  // NEW: Check for unsaved changes including pending deletions
   useEffect(() => {
     if (originalPatient && patient) {
-      const hasChanges = JSON.stringify(patient) !== JSON.stringify(originalPatient);
-      setHasUnsavedChanges(hasChanges);
+      const hasDataChanges = JSON.stringify(patient) !== JSON.stringify(originalPatient);
+      const hasPendingDeletions = pendingFileDeletions.length > 0;
+      setHasUnsavedChanges(hasDataChanges || hasPendingDeletions);
     }
-  }, [patient, originalPatient]);
+  }, [patient, originalPatient, pendingFileDeletions]);
 
   // Handle browser refresh/close with unsaved changes
   useEffect(() => {
@@ -185,7 +200,36 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // Simplified save handler
+  // NEW: Helper function to actually delete files from Cloudinary
+  const deleteFilesFromCloudinary = async (urls: string[]): Promise<void> => {
+    if (!selectedClinic || urls.length === 0) return;
+
+    try {
+      console.log('Deleting files from Cloudinary:', urls);
+      
+      // Delete files one by one (you could also implement batch delete)
+      for (const url of urls) {
+        const deleteResponse = await fetch(
+          `/api/clinic/${toIdString(selectedClinic._id)}/files?url=${encodeURIComponent(url)}`,
+          { method: 'DELETE' }
+        );
+
+        const result = await deleteResponse.json();
+        
+        if (!result.success) {
+          console.warn(`Failed to delete file from Cloudinary: ${url}`, result.error);
+          // Continue with other deletions even if one fails
+        } else {
+          console.log(`Successfully deleted file: ${url}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting files from Cloudinary:', error);
+      // Don't throw - we want to continue with the save operation
+    }
+  };
+
+  // UPDATED: Save handler with proper file deletion
   const handleSave = async () => {
     if (!patient._id || !clinicId) {
       alert("Missing patient ID or clinic ID");
@@ -201,7 +245,14 @@ export default function EditPatient({ params }: PageProps) {
     setIsSaving(true);
 
     try {
-      // Save patient data
+      // NEW: First, delete files from Cloudinary that are marked for deletion
+      if (pendingFileDeletions.length > 0) {
+        const urlsToDelete = pendingFileDeletions.map(deletion => deletion.url);
+        await deleteFilesFromCloudinary(urlsToDelete);
+        console.log(`Deleted ${pendingFileDeletions.length} files from Cloudinary`);
+      }
+
+      // Save patient data to database
       await dispatch(
         updatePatient({
           patientId: toIdString(patient._id),
@@ -212,6 +263,9 @@ export default function EditPatient({ params }: PageProps) {
 
       // Update original state to current state
       setOriginalPatient(JSON.parse(JSON.stringify(patient)));
+      
+      // NEW: Clear pending deletions after successful save
+      setPendingFileDeletions([]);
       setHasUnsavedChanges(false);
 
       // Navigate back to dashboard after successful update
@@ -224,7 +278,7 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // Handle discard changes
+  // UPDATED: Handle discard changes with pending deletions
   const handleDiscard = async () => {
     if (hasUnsavedChanges) {
       setShowDiscardConfirmation(true);
@@ -233,13 +287,16 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // Confirm discard changes
+  // UPDATED: Confirm discard changes with pending deletions
   const confirmDiscard = async () => {
     // Reset to original state
     if (originalPatient) {
       setPatient(JSON.parse(JSON.stringify(originalPatient)));
-      setHasUnsavedChanges(false);
     }
+    
+    // NEW: Clear pending deletions (files will remain in Cloudinary)
+    setPendingFileDeletions([]);
+    setHasUnsavedChanges(false);
     setShowDiscardConfirmation(false);
     router.push(`/dashboard`);
   };
@@ -298,6 +355,11 @@ export default function EditPatient({ params }: PageProps) {
   // Simplified record removal
   const handleRemoveRecord = async (index: number) => {
     if (confirm("Are you sure you want to delete this medical record?")) {
+      // NEW: When removing a record, also remove any pending deletions for that record
+      setPendingFileDeletions(prev => 
+        prev.filter(deletion => deletion.recordIndex !== index)
+      );
+
       setPatient((prev) => {
         if (!prev.history) return prev;
 
@@ -335,7 +397,7 @@ export default function EditPatient({ params }: PageProps) {
     });
   };
 
-  // Simplified document handlers
+  // Document handlers
   const handleAddDocument = async (recordIndex: number, url: string) => {
     setPatient((prev) => {
       if (!prev.history) return prev;
@@ -357,8 +419,37 @@ export default function EditPatient({ params }: PageProps) {
     });
   };
 
+  // NEW: Updated document removal handler - only marks for deletion
   const handleRemoveDocument = async (recordIndex: number, documentIndex: number) => {
-    // FIXED: Remove extra confirmation since EnhancedFileList already handles it
+    if (!patient.history || !patient.history[recordIndex]) return;
+
+    const record = patient.history[recordIndex];
+    const documentUrl = record.document_urls?.[documentIndex];
+    
+    if (!documentUrl) return;
+
+    // Extract filename for display purposes
+    const filename = documentUrl.split('/').pop() || 'Document';
+
+    console.log('Marking document for deletion:', {
+      recordIndex,
+      documentIndex,
+      url: documentUrl,
+      filename
+    });
+
+    // NEW: Add to pending deletions instead of deleting immediately
+    setPendingFileDeletions(prev => [
+      ...prev,
+      {
+        recordIndex,
+        documentIndex,
+        url: documentUrl,
+        filename
+      }
+    ]);
+
+    // Remove from patient data (UI will show it as removed)
     setPatient((prev) => {
       if (!prev.history) return prev;
 
@@ -377,6 +468,13 @@ export default function EditPatient({ params }: PageProps) {
         history: updatedHistory,
       };
     });
+  };
+
+  // NEW: Helper function to check if a file is pending deletion
+  const isFilePendingDeletion = (recordIndex: number, documentIndex: number): boolean => {
+    return pendingFileDeletions.some(
+      deletion => deletion.recordIndex === recordIndex && deletion.documentIndex === documentIndex
+    );
   };
 
   // Show loading screen while resolving params or loading data
@@ -439,9 +537,20 @@ export default function EditPatient({ params }: PageProps) {
             <h3 className="text-xl font-bold text-red-600 mb-4">
               Discard Changes?
             </h3>
-            <p className="text-gray-700 mb-6">
-              You have unsaved changes that will be lost. Are you sure you want to continue?
-            </p>
+            <div className="mb-6">
+              <p className="text-gray-700 mb-3">
+                You have unsaved changes that will be lost:
+              </p>
+              <ul className="text-sm text-gray-600 space-y-1">
+                <li>• Patient information changes</li>
+                {pendingFileDeletions.length > 0 && (
+                  <li>• {pendingFileDeletions.length} file(s) marked for deletion</li>
+                )}
+              </ul>
+              <p className="text-gray-700 mt-3">
+                Are you sure you want to continue?
+              </p>
+            </div>
             <div className="flex space-x-3">
               <button
                 onClick={cancelDiscard}
@@ -488,6 +597,14 @@ export default function EditPatient({ params }: PageProps) {
               <p className="text-slate-500">
                 ปรับปรุงข้อมูลผู้ป่วยและประวัติการรักษา
               </p>
+              {/* NEW: Show pending deletions info */}
+              {pendingFileDeletions.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                    {pendingFileDeletions.length} file(s) marked for deletion - will be removed when you save
+                  </p>
+                </div>
+              )}
             </div>
             <div className="flex gap-3">
               <button
