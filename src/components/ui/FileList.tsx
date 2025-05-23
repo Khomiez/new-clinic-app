@@ -186,9 +186,3 @@ export default function FileList({
     </>
   );
 }
-
-
-
-// STEP 3: Check how you're fetching and displaying files in your components
-// Make sure you're passing the raw Cloudinary resources to FileList component
-// The FileList component will then use getOriginalFilename() to display correct names
