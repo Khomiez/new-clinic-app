@@ -1,4 +1,4 @@
-// src/components/ui/EnhancedFileList.tsx - UPDATED: Support for temporary files and pending uploads
+// src/components/ui/EnhancedFileList.tsx - FIXED: Unique keys and proper file filtering
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -15,9 +15,11 @@ interface EnhancedFileListProps {
   compact?: boolean;
   patientId?: string;
   pendingDeletions?: string[];
-  // NEW: Support for temporary files
+  // Temporary files support - but only for display, not upload
   temporaryFiles?: TemporaryFile[];
   onDeleteTemporaryFile?: (tempFileId: string) => void;
+  // NEW: Control whether to show temporary files (default: false for saved records)
+  showTemporaryFiles?: boolean;
 }
 
 interface CloudinaryResource {
@@ -34,9 +36,9 @@ interface CloudinaryResource {
   tags?: string[];
 }
 
-// NEW: Combined file interface for display
+// FIXED: Enhanced DisplayFile interface with guaranteed unique ID generation
 interface DisplayFile {
-  id: string;
+  id: string; // This will be guaranteed unique
   url: string;
   filename: string;
   size?: number;
@@ -46,6 +48,9 @@ interface DisplayFile {
   isTemporary: boolean;
   isPendingDeletion?: boolean;
   tempFile?: TemporaryFile;
+  // NEW: Add source index for guaranteed uniqueness
+  sourceIndex: number;
+  sourceType: 'cloudinary' | 'temporary';
 }
 
 // Get appropriate icon for file type
@@ -85,8 +90,9 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
   compact = false,
   patientId,
   pendingDeletions = [],
-  temporaryFiles = [], // NEW: Temporary files array
-  onDeleteTemporaryFile, // NEW: Handler for deleting temporary files
+  temporaryFiles = [],
+  onDeleteTemporaryFile,
+  showTemporaryFiles = false, // NEW: Default to false - only show temp files when explicitly requested
 }) => {
   const [cloudinaryResources, setCloudinaryResources] = useState<CloudinaryResource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,80 +105,79 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
 
   useEffect(() => {
     const fetchFileMetadata = async () => {
-      if (!clinicId || (fileUrls.length === 0 && temporaryFiles.length === 0)) {
+      // FIXED: Only fetch if we have actual Cloudinary URLs (not temporary ones)
+      const actualFileUrls = fileUrls.filter(url => !url.startsWith('temp://'));
+      
+      if (!clinicId || actualFileUrls.length === 0) {
+        setCloudinaryResources([]);
         setLoading(false);
         return;
       }
 
       try {
-        // Only fetch Cloudinary resources if we have actual URLs
-        if (fileUrls.length > 0) {
-          console.log("Fetching metadata for clinic:", clinicId);
-          console.log("File URLs:", fileUrls);
+        console.log("Fetching metadata for clinic:", clinicId);
+        console.log("Actual file URLs (no temp):", actualFileUrls);
 
-          const queryParams = new URLSearchParams();
-          if (patientId) {
-            queryParams.append('patientId', patientId);
-          }
+        const queryParams = new URLSearchParams();
+        if (patientId) {
+          queryParams.append('patientId', patientId);
+        }
 
-          const response = await fetch(`/api/clinic/${clinicId}/files?${queryParams.toString()}`);
-          const data = await response.json();
+        const response = await fetch(`/api/clinic/${clinicId}/files?${queryParams.toString()}`);
+        const data = await response.json();
 
-          console.log("API response:", data);
+        console.log("API response:", data);
 
-          if (data.success && data.files) {
-            const matchedResources = fileUrls.map((url) => {
-              const resource = data.files.find(
-                (resource: CloudinaryResource) => resource.secure_url === url
-              );
-
-              if (resource) {
-                console.log("Found resource for URL:", url, resource);
-                return resource;
-              } else {
-                console.log("No resource found for URL:", url, "using fallback");
-                return {
-                  public_id: `fallback_${Date.now()}`,
-                  secure_url: url,
-                  format: "unknown",
-                  resource_type: "auto",
-                  created_at: new Date().toISOString(),
-                  context: {
-                    original_filename: extractFilenameFromUrl(url)
-                  },
-                } as CloudinaryResource;
-              }
-            });
-
-            setCloudinaryResources(matchedResources);
-          } else {
-            const fallbackResources = fileUrls.map(
-              (url, index) =>
-                ({
-                  public_id: `fallback_${index}_${Date.now()}`,
-                  secure_url: url,
-                  format: "unknown",
-                  resource_type: "auto",
-                  created_at: new Date().toISOString(),
-                  context: {
-                    original_filename: extractFilenameFromUrl(url)
-                  },
-                } as CloudinaryResource)
+        if (data.success && data.files) {
+          const matchedResources = actualFileUrls.map((url) => {
+            const resource = data.files.find(
+              (resource: CloudinaryResource) => resource.secure_url === url
             );
 
-            setCloudinaryResources(fallbackResources);
-          }
+            if (resource) {
+              console.log("Found resource for URL:", url, resource);
+              return resource;
+            } else {
+              console.log("No resource found for URL:", url, "using fallback");
+              return {
+                public_id: `fallback_${Date.now()}_${Math.random()}`,
+                secure_url: url,
+                format: "unknown",
+                resource_type: "auto",
+                created_at: new Date().toISOString(),
+                context: {
+                  original_filename: extractFilenameFromUrl(url)
+                },
+              } as CloudinaryResource;
+            }
+          });
+
+          setCloudinaryResources(matchedResources);
         } else {
-          setCloudinaryResources([]);
+          const fallbackResources = actualFileUrls.map(
+            (url, index) =>
+              ({
+                public_id: `fallback_${index}_${Date.now()}_${Math.random()}`,
+                secure_url: url,
+                format: "unknown",
+                resource_type: "auto",
+                created_at: new Date().toISOString(),
+                context: {
+                  original_filename: extractFilenameFromUrl(url)
+                },
+              } as CloudinaryResource)
+          );
+
+          setCloudinaryResources(fallbackResources);
         }
       } catch (error) {
         console.error("Error fetching file metadata:", error);
         setError("Failed to load file information");
 
-        const fallbackResources = fileUrls.map(
+        const fallbackResources = actualFileUrls.map(
           (url, index) =>
             ({
-              public_id: `error_fallback_${index}`,
+              public_id: `error_fallback_${index}_${Date.now()}_${Math.random()}`,
               secure_url: url,
               format: "unknown",
               resource_type: "auto",
@@ -192,23 +197,33 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
     fetchFileMetadata();
   }, [fileUrls, clinicId, patientId]);
 
-  // NEW: Combine Cloudinary resources and temporary files for display
+  // FIXED: Create display files with guaranteed unique keys
   const displayFiles: DisplayFile[] = [
-    // Existing Cloudinary files
-    ...cloudinaryResources.map((resource, index) => ({
-      id: resource.public_id,
-      url: resource.secure_url,
-      filename: getOriginalFilename(resource),
-      size: resource.bytes,
-      type: 'cloudinary' as const,
-      format: resource.format,
-      created_at: resource.created_at,
-      isTemporary: false,
-      isPendingDeletion: pendingDeletions.includes(resource.secure_url),
-    })),
-    // NEW: Temporary files
-    ...temporaryFiles.map((tempFile) => ({
-      id: tempFile.id,
+    // Existing Cloudinary files (only non-temporary URLs)
+    ...cloudinaryResources
+      .filter((resource, index) => {
+        // Make sure we only include files that are not temporary URLs
+        return !resource.secure_url.startsWith('temp://');
+      })
+      .map((resource, index) => ({
+        // FIXED: Guaranteed unique ID using multiple sources
+        id: `cloudinary_${resource.public_id}_${index}_${resource.secure_url.split('/').pop()}`,
+        url: resource.secure_url,
+        filename: getOriginalFilename(resource),
+        size: resource.bytes,
+        type: 'cloudinary' as const,
+        format: resource.format,
+        created_at: resource.created_at,
+        isTemporary: false,
+        isPendingDeletion: pendingDeletions.includes(resource.secure_url),
+        sourceIndex: index,
+        sourceType: 'cloudinary' as const,
+      })),
+    
+    // FIXED: Temporary files (only if explicitly requested)
+    ...(showTemporaryFiles ? temporaryFiles.map((tempFile, index) => ({
+      // FIXED: Guaranteed unique ID for temporary files
+      id: `temporary_${tempFile.id}_${index}_${tempFile.timestamp}`,
       url: createFilePreviewUrl(tempFile.file),
       filename: tempFile.filename,
       size: tempFile.size,
@@ -218,7 +233,9 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
       isTemporary: true,
       isPendingDeletion: false,
       tempFile,
-    }))
+      sourceIndex: index,
+      sourceType: 'temporary' as const,
+    })) : [])
   ];
 
   const handleDownload = (displayFile: DisplayFile) => {
@@ -253,7 +270,7 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
 
   const handleDelete = async (displayFile: DisplayFile, index: number) => {
     if (displayFile.isTemporary) {
-      // NEW: Handle temporary file deletion
+      // Handle temporary file deletion
       if (!onDeleteTemporaryFile) return;
 
       if (!confirm(`Remove "${displayFile.filename}" from the record? This temporary file will be discarded.`)) {
@@ -261,7 +278,7 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
       }
 
       console.log('Removing temporary file:', displayFile.id);
-      onDeleteTemporaryFile(displayFile.id);
+      onDeleteTemporaryFile(displayFile.id.split('_')[1]); // Extract original temp file ID
     } else {
       // Handle regular file deletion (mark for deletion)
       if (!onDeleteFile) return;
@@ -323,6 +340,7 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                            (displayFile.tempFile?.type.startsWith('image/'));
 
           return (
+            // FIXED: Use the guaranteed unique ID
             <div key={displayFile.id} className="relative">
               <div
                 className={`

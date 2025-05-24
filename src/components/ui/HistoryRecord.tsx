@@ -1,4 +1,4 @@
-// src/components/ui/HistoryRecord.tsx - UPDATED: Support for temporary files
+// src/components/ui/HistoryRecord.tsx - FIXED: Proper temporary file control
 "use client";
 
 import React, { useState } from "react";
@@ -19,10 +19,12 @@ interface HistoryRecordProps {
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
   onUpdateNotes: (index: number, notes: string) => void;
   pendingDeletions?: string[];
-  // NEW: Temporary file support
+  // Temporary file support
   temporaryFiles?: TemporaryFile[];
   onAddTemporaryFile?: (recordIndex: number, tempFile: TemporaryFile) => void;
   onRemoveTemporaryFile?: (tempFileId: string) => void;
+  // NEW: Control whether this is in edit mode (shows temp files) or view mode (hides temp files)
+  isEditMode?: boolean;
 }
 
 export default function HistoryRecord({
@@ -36,9 +38,10 @@ export default function HistoryRecord({
   onRemoveDocument,
   onUpdateNotes,
   pendingDeletions = [],
-  temporaryFiles = [], // NEW: Temporary files for this record
-  onAddTemporaryFile, // NEW: Handler for adding temporary files
-  onRemoveTemporaryFile, // NEW: Handler for removing temporary files
+  temporaryFiles = [],
+  onAddTemporaryFile,
+  onRemoveTemporaryFile,
+  isEditMode = true, // NEW: Default to edit mode, but can be set to false for saved records
 }: HistoryRecordProps) {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -80,10 +83,10 @@ export default function HistoryRecord({
     setIsAddingDocument(true);
   };
 
-  // NEW: Handle temporary file addition
+  // Handle temporary file addition (only in edit mode)
   const handleTemporaryFileAdded = (tempFile: TemporaryFile) => {
     console.log('HistoryRecord: Received temporary file:', tempFile);
-    if (onAddTemporaryFile) {
+    if (onAddTemporaryFile && isEditMode) {
       onAddTemporaryFile(index, tempFile);
     }
     setIsAddingDocument(false);
@@ -105,21 +108,22 @@ export default function HistoryRecord({
     onRemoveDocument(index, docIndex);
   };
 
-  // NEW: Handle temporary file removal
+  // Handle temporary file removal (only in edit mode)
   const handleDeleteTemporaryFile = (tempFileId: string) => {
     console.log('HistoryRecord: Removing temporary file:', tempFileId);
-    if (onRemoveTemporaryFile) {
+    if (onRemoveTemporaryFile && isEditMode) {
       onRemoveTemporaryFile(tempFileId);
     }
   };
 
-  // NEW: Get temporary files for this specific record
-  const recordTemporaryFiles = temporaryFiles.filter(
-    (tempFile) => tempFile.recordIndex === index
-  );
+  // FIXED: Get temporary files for this specific record (only in edit mode)
+  const recordTemporaryFiles = isEditMode 
+    ? temporaryFiles.filter((tempFile) => tempFile.recordIndex === index)
+    : []; // Don't show temp files in view mode
 
-  // NEW: Calculate total files (existing + temporary)
-  const totalFiles = (record.document_urls?.length || 0) + recordTemporaryFiles.length;
+  // FIXED: Calculate total files correctly - exclude temp:// URLs from document_urls
+  const actualDocumentUrls = (record.document_urls || []).filter(url => !url.startsWith('temp://'));
+  const totalFiles = actualDocumentUrls.length + recordTemporaryFiles.length;
   const totalPendingDeletions = pendingDeletions.length;
   const totalPendingUploads = recordTemporaryFiles.length;
 
@@ -128,7 +132,7 @@ export default function HistoryRecord({
       {/* Header */}
       <div className="flex justify-between items-start mb-3">
         <div className="flex-grow">
-          {isEditingDate ? (
+          {isEditingDate && isEditMode ? (
             <div className="flex items-center gap-2">
               <div className="flex-grow">
                 <ThaiDatePicker
@@ -150,24 +154,28 @@ export default function HistoryRecord({
               <h3 className="font-medium text-blue-700">
                 {formatDate(record.timestamp)}
               </h3>
-              <button
-                onClick={() => setIsEditingDate(true)}
-                className="text-blue-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50"
-                title="Edit date"
-              >
-                ✏️
-              </button>
+              {isEditMode && (
+                <button
+                  onClick={() => setIsEditingDate(true)}
+                  className="text-blue-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50"
+                  title="Edit date"
+                >
+                  ✏️
+                </button>
+              )}
             </div>
           )}
         </div>
 
-        <button
-          onClick={() => onRemove(index)}
-          className="text-red-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50"
-          title="Remove record"
-        >
-          ❌
-        </button>
+        {isEditMode && (
+          <button
+            onClick={() => onRemove(index)}
+            className="text-red-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50"
+            title="Remove record"
+          >
+            ❌
+          </button>
+        )}
       </div>
 
       {/* Notes Section */}
@@ -175,7 +183,7 @@ export default function HistoryRecord({
         <div className="flex items-center mb-2">
           <span className="text-blue-400 mr-1">📝</span>
           <h4 className="font-medium text-blue-600">Notes</h4>
-          {!isEditingNotes && (
+          {!isEditingNotes && isEditMode && (
             <button
               onClick={() => setIsEditingNotes(true)}
               className="ml-2 text-blue-400 hover:text-blue-600 p-1 rounded-full hover:bg-blue-50"
@@ -186,7 +194,7 @@ export default function HistoryRecord({
           )}
         </div>
 
-        {isEditingNotes ? (
+        {isEditingNotes && isEditMode ? (
           <div>
             <textarea
               value={notesValue}
@@ -229,57 +237,60 @@ export default function HistoryRecord({
             <span className="text-blue-400 mr-1">📁</span>
             <h4 className="font-medium text-blue-600">Documents</h4>
             
-            {/* NEW: Enhanced status indicators */}
+            {/* FIXED: Enhanced status indicators - only show meaningful counts */}
             <div className="ml-2 flex items-center space-x-2">
               {totalFiles > 0 && (
                 <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
                   {totalFiles} file{totalFiles > 1 ? 's' : ''}
                 </span>
               )}
-              {totalPendingDeletions > 0 && (
+              {totalPendingDeletions > 0 && isEditMode && (
                 <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
                   {totalPendingDeletions} pending deletion
                 </span>
               )}
-              {totalPendingUploads > 0 && (
+              {totalPendingUploads > 0 && isEditMode && (
                 <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">
                   {totalPendingUploads} pending upload
                 </span>
               )}
             </div>
           </div>
-          <button
-            onClick={handleAddDocumentClick}
-            className="text-sm bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-200 flex items-center gap-1"
-            disabled={!clinicId}
-          >
-            <span>+</span> Add Document
-          </button>
+          {isEditMode && (
+            <button
+              onClick={handleAddDocumentClick}
+              className="text-sm bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-200 flex items-center gap-1"
+              disabled={!clinicId}
+            >
+              <span>+</span> Add Document
+            </button>
+          )}
         </div>
 
         {/* Document Upload Form */}
-        {isAddingDocument && clinicId && (
+        {isAddingDocument && clinicId && isEditMode && (
           <div className="mb-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
             <DocumentUpload
               clinicId={clinicId}
               patientId={patientId}
-              recordIndex={index} // NEW: Pass record index
-              onAddDocument={handleTemporaryFileAdded} // NEW: Handle temporary files
+              recordIndex={index}
+              onAddDocument={handleTemporaryFileAdded} // Handle temporary files
               onCancel={() => setIsAddingDocument(false)}
             />
           </div>
         )}
 
-        {/* Documents List - UPDATED: Pass temporary files */}
+        {/* Documents List - FIXED: Pass correct props */}
         <EnhancedFileList
-          fileUrls={record.document_urls || []}
+          fileUrls={actualDocumentUrls} // FIXED: Only pass actual URLs, not temp:// ones
           clinicId={clinicId || ""}
-          onDeleteFile={handleDeleteDocument}
-          showActions={true}
+          onDeleteFile={isEditMode ? handleDeleteDocument : undefined}
+          showActions={isEditMode}
           compact={false}
           pendingDeletions={pendingDeletions}
-          temporaryFiles={recordTemporaryFiles} // NEW: Pass record-specific temporary files
-          onDeleteTemporaryFile={handleDeleteTemporaryFile} // NEW: Handle temporary file deletion
+          temporaryFiles={recordTemporaryFiles} // Pass record-specific temporary files
+          onDeleteTemporaryFile={isEditMode ? handleDeleteTemporaryFile : undefined}
+          showTemporaryFiles={isEditMode} // FIXED: Only show temp files in edit mode
         />
       </div>
     </div>

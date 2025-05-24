@@ -12,7 +12,10 @@ import {
   ThaiDatePicker,
 } from "@/components";
 import { IPatient, IClinic, IHistoryRecord } from "@/interfaces";
-import { TemporaryFile, revokeFilePreviewUrl } from "@/utils/temporaryFileStorage";
+import {
+  TemporaryFile,
+  revokeFilePreviewUrl,
+} from "@/utils/temporaryFileStorage";
 import { uploadToCloudinary } from "@/utils/cloudinaryUploader";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
@@ -76,7 +79,7 @@ export default function EditPatient({ params }: PageProps) {
   const [pendingFileDeletions, setPendingFileDeletions] = useState<
     PendingFileDeletion[]
   >([]);
-  
+
   // NEW: State for tracking temporary files (pending uploads)
   const [temporaryFiles, setTemporaryFiles] = useState<TemporaryFile[]>([]);
 
@@ -177,7 +180,9 @@ export default function EditPatient({ params }: PageProps) {
         JSON.stringify(patient) !== JSON.stringify(originalPatient);
       const hasPendingDeletions = pendingFileDeletions.length > 0;
       const hasPendingUploads = temporaryFiles.length > 0; // NEW: Check temporary files
-      setHasUnsavedChanges(hasDataChanges || hasPendingDeletions || hasPendingUploads);
+      setHasUnsavedChanges(
+        hasDataChanges || hasPendingDeletions || hasPendingUploads
+      );
     }
   }, [patient, originalPatient, pendingFileDeletions, temporaryFiles]);
 
@@ -200,7 +205,7 @@ export default function EditPatient({ params }: PageProps) {
   useEffect(() => {
     return () => {
       // Clean up object URLs to prevent memory leaks
-      temporaryFiles.forEach(tempFile => {
+      temporaryFiles.forEach((tempFile) => {
         if (tempFile.previewUrl) {
           revokeFilePreviewUrl(tempFile.previewUrl);
         }
@@ -226,14 +231,24 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // NEW: Helper function to upload temporary files to Cloudinary
-  const uploadTemporaryFiles = async (tempFiles: TemporaryFile[]): Promise<string[]> => {
+  const uploadTemporaryFiles = async (
+    tempFiles: TemporaryFile[]
+  ): Promise<string[]> => {
     if (!selectedClinic || tempFiles.length === 0) return [];
 
-    const uploadPromises = tempFiles.map(async (tempFile) => {
+    console.log(`Starting upload of ${tempFiles.length} temporary files...`);
+
+    const uploadResults: string[] = [];
+
+    // Upload files sequentially to avoid overwhelming the server
+    for (let i = 0; i < tempFiles.length; i++) {
+      const tempFile = tempFiles[i];
+
       try {
-        console.log('Uploading temporary file:', tempFile.filename);
-        
+        console.log(
+          `Uploading file ${i + 1}/${tempFiles.length}: ${tempFile.filename}`
+        );
+
         // Convert File to Buffer
         const arrayBuffer = await tempFile.file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
@@ -248,18 +263,29 @@ export default function EditPatient({ params }: PageProps) {
         });
 
         if (!result.success) {
-          throw new Error(result.error || 'Upload failed');
+          throw new Error(result.error || "Upload failed");
         }
 
-        console.log('Successfully uploaded:', tempFile.filename, '-> URL:', result.url);
-        return result.url!;
+        uploadResults.push(result.url!);
+        console.log(
+          `Successfully uploaded: ${tempFile.filename} -> ${result.url}`
+        );
       } catch (error) {
-        console.error('Failed to upload temporary file:', tempFile.filename, error);
-        throw new Error(`Failed to upload ${tempFile.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error(
+          `Failed to upload temporary file: ${tempFile.filename}`,
+          error
+        );
+        // Stop the upload process on first failure
+        throw new Error(
+          `Failed to upload ${tempFile.filename}: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
       }
-    });
+    }
 
-    return Promise.all(uploadPromises);
+    console.log(`All ${tempFiles.length} files uploaded successfully`);
+    return uploadResults;
   };
 
   // Helper function to actually delete files from Cloudinary
@@ -296,35 +322,45 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // NEW: Process patient data to replace temporary file placeholders with actual URLs
-  const processPatientDataForSave = (patientData: Partial<IPatient>, uploadedUrls: string[]): Partial<IPatient> => {
+  const processPatientDataForSave = (
+    patientData: Partial<IPatient>,
+    uploadedUrls: string[]
+  ): Partial<IPatient> => {
     if (!patientData.history) return patientData;
 
     let urlIndex = 0;
-    const processedHistory = patientData.history.map(record => {
+    const processedHistory = patientData.history.map((record) => {
       if (!record.document_urls) return record;
 
-      const processedUrls = record.document_urls.map(url => {
-        if (url.startsWith('temp://')) {
+      // FIXED: Filter out temp:// URLs and replace them with actual uploaded URLs
+      const processedUrls: string[] = [];
+
+      record.document_urls.forEach((url) => {
+        if (url.startsWith("temp://")) {
           // Replace temporary URL with actual Cloudinary URL
-          return uploadedUrls[urlIndex++];
+          if (urlIndex < uploadedUrls.length) {
+            processedUrls.push(uploadedUrls[urlIndex]);
+            urlIndex++;
+          }
+          // If we run out of uploaded URLs, skip this temp URL (shouldn't happen)
+        } else {
+          // Keep existing non-temporary URLs
+          processedUrls.push(url);
         }
-        return url;
       });
 
       return {
         ...record,
-        document_urls: processedUrls
+        document_urls: processedUrls,
       };
     });
 
     return {
       ...patientData,
-      history: processedHistory
+      history: processedHistory,
     };
   };
 
-  // UPDATED: Save handler with proper file upload and deletion
   const handleSave = async () => {
     if (!patient._id || !clinicId) {
       alert("Missing patient ID or clinic ID");
@@ -340,21 +376,37 @@ export default function EditPatient({ params }: PageProps) {
     setIsSaving(true);
 
     try {
-      console.log('Starting save process...', {
+      console.log("Starting save process...", {
         pendingDeletions: pendingFileDeletions.length,
-        temporaryFiles: temporaryFiles.length
+        temporaryFiles: temporaryFiles.length,
       });
 
       // Step 1: Upload temporary files to Cloudinary
       let uploadedUrls: string[] = [];
       if (temporaryFiles.length > 0) {
-        console.log('Uploading temporary files to Cloudinary...');
+        console.log("Uploading temporary files to Cloudinary...");
         uploadedUrls = await uploadTemporaryFiles(temporaryFiles);
-        console.log('Upload completed. URLs:', uploadedUrls);
+        console.log("Upload completed. URLs:", uploadedUrls);
       }
 
       // Step 2: Process patient data to replace temporary URLs with real ones
-      const processedPatientData = processPatientDataForSave(patient, uploadedUrls);
+      const processedPatientData = processPatientDataForSave(
+        patient,
+        uploadedUrls
+      );
+
+      // VALIDATION: Ensure no temp:// URLs remain in the final data
+      const hasRemainingTempUrls =
+        JSON.stringify(processedPatientData).includes("temp://");
+      if (hasRemainingTempUrls) {
+        console.error(
+          "ERROR: Temporary URLs still found in processed data!",
+          processedPatientData
+        );
+        throw new Error(
+          "Failed to process all temporary files. Please try again."
+        );
+      }
 
       // Step 3: Delete files from Cloudinary that are marked for deletion
       if (pendingFileDeletions.length > 0) {
@@ -368,6 +420,7 @@ export default function EditPatient({ params }: PageProps) {
       }
 
       // Step 4: Save patient data to database
+      console.log("Saving patient data to database...", processedPatientData);
       await dispatch(
         updatePatient({
           patientId: toIdString(patient._id),
@@ -381,18 +434,18 @@ export default function EditPatient({ params }: PageProps) {
 
       // Step 6: Clear pending operations after successful save
       setPendingFileDeletions([]);
-      
+
       // Clean up temporary files
-      temporaryFiles.forEach(tempFile => {
+      temporaryFiles.forEach((tempFile) => {
         if (tempFile.previewUrl) {
           revokeFilePreviewUrl(tempFile.previewUrl);
         }
       });
       setTemporaryFiles([]);
-      
+
       setHasUnsavedChanges(false);
 
-      console.log('Save process completed successfully');
+      console.log("Save process completed successfully");
 
       // Navigate back to dashboard after successful update
       router.push(`/dashboard`);
@@ -422,15 +475,15 @@ export default function EditPatient({ params }: PageProps) {
 
     // Clear pending operations
     setPendingFileDeletions([]);
-    
+
     // NEW: Clean up temporary files
-    temporaryFiles.forEach(tempFile => {
+    temporaryFiles.forEach((tempFile) => {
       if (tempFile.previewUrl) {
         revokeFilePreviewUrl(tempFile.previewUrl);
       }
     });
     setTemporaryFiles([]);
-    
+
     setHasUnsavedChanges(false);
     setShowDiscardConfirmation(false);
     router.push(`/dashboard`);
@@ -493,7 +546,7 @@ export default function EditPatient({ params }: PageProps) {
       setPendingFileDeletions((prev) =>
         prev.filter((deletion) => deletion.recordIndex !== index)
       );
-      
+
       // NEW: Remove temporary files for this record
       setTemporaryFiles((prev) =>
         prev.filter((tempFile) => tempFile.recordIndex !== index)
@@ -615,11 +668,14 @@ export default function EditPatient({ params }: PageProps) {
   };
 
   // NEW: Handle temporary file addition
-  const handleAddTemporaryFile = (recordIndex: number, tempFile: TemporaryFile) => {
-    console.log('Adding temporary file:', { recordIndex, tempFile });
-    
+  const handleAddTemporaryFile = (
+    recordIndex: number,
+    tempFile: TemporaryFile
+  ) => {
+    console.log("Adding temporary file:", { recordIndex, tempFile });
+
     // Add to temporary files list
-    setTemporaryFiles(prev => [...prev, tempFile]);
+    setTemporaryFiles((prev) => [...prev, tempFile]);
 
     // Add placeholder URL to patient data
     setPatient((prev) => {
@@ -632,7 +688,10 @@ export default function EditPatient({ params }: PageProps) {
 
       updatedHistory[recordIndex] = {
         ...record,
-        document_urls: [...(record.document_urls || []), `temp://${tempFile.id}`],
+        document_urls: [
+          ...(record.document_urls || []),
+          `temp://${tempFile.id}`,
+        ],
       };
 
       return {
@@ -644,18 +703,18 @@ export default function EditPatient({ params }: PageProps) {
 
   // NEW: Handle temporary file removal
   const handleRemoveTemporaryFile = (tempFileId: string) => {
-    console.log('Removing temporary file:', tempFileId);
-    
+    console.log("Removing temporary file:", tempFileId);
+
     // Find and remove the temporary file
-    const tempFile = temporaryFiles.find(tf => tf.id === tempFileId);
+    const tempFile = temporaryFiles.find((tf) => tf.id === tempFileId);
     if (tempFile) {
       // Clean up preview URL
       if (tempFile.previewUrl) {
         revokeFilePreviewUrl(tempFile.previewUrl);
       }
-      
+
       // Remove from temporary files list
-      setTemporaryFiles(prev => prev.filter(tf => tf.id !== tempFileId));
+      setTemporaryFiles((prev) => prev.filter((tf) => tf.id !== tempFileId));
 
       // Remove placeholder URL from patient data
       setPatient((prev) => {
@@ -669,7 +728,7 @@ export default function EditPatient({ params }: PageProps) {
         updatedHistory[tempFile.recordIndex] = {
           ...record,
           document_urls: record.document_urls.filter(
-            url => url !== `temp://${tempFileId}`
+            (url) => url !== `temp://${tempFileId}`
           ),
         };
 
@@ -753,9 +812,7 @@ export default function EditPatient({ params }: PageProps) {
                   </li>
                 )}
                 {temporaryFiles.length > 0 && (
-                  <li>
-                    • {temporaryFiles.length} file(s) pending upload
-                  </li>
+                  <li>• {temporaryFiles.length} file(s) pending upload</li>
                 )}
               </ul>
               <p className="text-gray-700 mt-3">

@@ -1,10 +1,6 @@
-// src/utils/cloudinaryUploader.ts - COMPLETE FIXED VERSION: Proper Thai filename preservation & folder structure
+// src/utils/cloudinaryUploader.ts - FIXED: Proper configuration and error handling
 import { v2 as cloudinary } from "cloudinary";
-import { checkCloudinaryConfig } from "./cloudinaryConfig";
-
-cloudinary.config({
-  secure: true,
-});
+import { configureCloudinary, debugCloudinaryEnv } from "./cloudinaryConfig";
 
 interface UploadOptions {
   clinicId: string;
@@ -43,15 +39,11 @@ interface GetResourcesResult {
 }
 
 /**
- * FIXED: Create safe folder name while preserving Thai characters
- * Now properly handles Thai clinic names for folder structure
+ * Create safe folder name while preserving Thai characters
  */
 function createSafeClinicFolderName(clinicName: string): string {
   if (!clinicName) return "default_clinic";
   
-  // For Thai names, we'll use a combination approach:
-  // 1. Keep Thai characters as they are (Cloudinary supports UTF-8)
-  // 2. Replace only truly problematic characters
   return clinicName
     .trim()
     .replace(/[\/\\:*?"<>|]/g, "_") // Replace file system problematic chars
@@ -61,14 +53,13 @@ function createSafeClinicFolderName(clinicName: string): string {
 }
 
 /**
- * FIXED: Create safe filename for Cloudinary public_id while preserving Thai
+ * Create safe filename for Cloudinary public_id while preserving Thai
  */
 function createSafePublicId(filename: string): string {
   if (!filename) return "document";
   
   const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
   
-  // Preserve Thai characters, replace only problematic ones
   return nameWithoutExt
     .replace(/[\/\\:*?"<>|]/g, '_') // Replace problematic file chars
     .replace(/\s+/g, '_') // Replace spaces
@@ -132,15 +123,16 @@ export function getOriginalFilename(resource: CloudinaryResource): string {
 }
 
 /**
- * FIXED: Upload file to Cloudinary with proper Thai filename preservation
- * Now follows exact folder structure: clinic_management/<clinic_name>/
+ * FIXED: Upload file to Cloudinary with proper configuration
  */
 export async function uploadToCloudinary(
   file: Buffer,
   options: UploadOptions
 ): Promise<UploadResult> {
   try {
-    checkCloudinaryConfig();
+    // FIXED: Configure Cloudinary at runtime, not at module level
+    console.log('Configuring Cloudinary for upload...');
+    configureCloudinary();
     
     const { clinicId, clinicName, filename = 'document', fileType, patientId } = options;
     
@@ -149,10 +141,11 @@ export async function uploadToCloudinary(
       clinicName,
       originalFilename: filename,
       fileType,
-      patientId
+      patientId,
+      fileSize: file.length
     });
     
-    // FIXED: Create proper folder structure: clinic_management/<clinic_name>/
+    // Create proper folder structure: clinic_management/<clinic_name>/
     const safeClinicName = createSafeClinicFolderName(clinicName);
     const folder = `clinic_management/${safeClinicName}`;
     
@@ -176,7 +169,7 @@ export async function uploadToCloudinary(
     // Convert buffer to base64
     const base64File = `data:${fileType || "application/octet-stream"};base64,${file.toString("base64")}`;
 
-    console.log('Starting Cloudinary upload:', {
+    console.log('Starting Cloudinary upload...', {
       folder,
       publicId,
       originalFilename: filename,
@@ -184,11 +177,10 @@ export async function uploadToCloudinary(
       fileSize: file.length
     });
 
-    // FIXED: Upload to Cloudinary with comprehensive metadata and proper context
+    // Upload to Cloudinary with comprehensive metadata
     const result = await cloudinary.uploader.upload(base64File, {
       public_id: publicId,
       resource_type: "auto",
-      // FIXED: Store original filename in context for proper retrieval
       context: {
         clinic_id: clinicId,
         clinic_name: clinicName,
@@ -203,7 +195,6 @@ export async function uploadToCloudinary(
         `filename:${filename}`, // Also store in tags as backup
         "clinic_management"
       ],
-      // FIXED: Add folder to ensure proper organization
       folder: folder,
     });
 
@@ -223,6 +214,16 @@ export async function uploadToCloudinary(
     };
   } catch (error: any) {
     console.error("Cloudinary upload error:", error);
+    
+    // Provide more specific error messages
+    if (error.message?.includes('Missing Cloudinary environment variables')) {
+      debugCloudinaryEnv(); // Debug environment variables
+      return {
+        success: false,
+        error: "Cloudinary configuration error. Please check your environment variables in .env.local",
+      };
+    }
+    
     return {
       success: false,
       error: error.message || "Upload failed",
@@ -235,7 +236,7 @@ export async function uploadToCloudinary(
  */
 export async function deleteFromCloudinary(publicId: string): Promise<UploadResult> {
   try {
-    checkCloudinaryConfig();
+    configureCloudinary();
     
     console.log('Attempting to delete from Cloudinary:', publicId);
     
@@ -261,14 +262,14 @@ export async function deleteFromCloudinary(publicId: string): Promise<UploadResu
 }
 
 /**
- * FIXED: Get all resources for a clinic with proper folder structure
+ * Get all resources for a clinic with proper folder structure
  */
 export async function getClinicResources(
   clinicId: string, 
   clinicName: string
 ): Promise<GetResourcesResult> {
   try {
-    checkCloudinaryConfig();
+    configureCloudinary();
     
     const safeClinicName = createSafeClinicFolderName(clinicName);
     const folderPrefix = `clinic_management/${safeClinicName}`;
@@ -306,8 +307,6 @@ export async function getClinicResources(
  */
 export function extractPublicIdFromUrl(url: string): string | null {
   try {
-    // Updated pattern to handle folders properly
-    // Pattern: https://res.cloudinary.com/{cloud_name}/{resource_type}/upload/v{version}/{folder}/{public_id}.{format}
     const match = url.match(/\/v\d+\/(.+)\.[^/?]+/);
     if (match) {
       const publicId = match[1];
@@ -330,7 +329,7 @@ export async function batchDeleteFromCloudinary(publicIds: string[]): Promise<{
   error?: string;
 }> {
   try {
-    checkCloudinaryConfig();
+    configureCloudinary();
     
     if (publicIds.length === 0) {
       return { success: true, deleted: [], failed: [] };
@@ -353,7 +352,6 @@ export async function batchDeleteFromCloudinary(publicIds: string[]): Promise<{
       }
     });
 
-    // Handle partial results from Cloudinary
     Object.entries(result.partial || {}).forEach(([id]) => {
       failed.push(id);
     });

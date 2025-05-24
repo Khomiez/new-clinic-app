@@ -1,4 +1,4 @@
-// src/components/ui/MedicalHistorySection.tsx - COMPLETE UPDATED: Support for temporary files
+// src/components/ui/MedicalHistorySection.tsx - FIXED: Proper edit mode control
 "use client";
 
 import React, { useState } from "react";
@@ -24,10 +24,12 @@ interface MedicalHistorySectionProps {
     url: string;
     filename: string;
   }>;
-  // NEW: Temporary file support
+  // Temporary file support
   temporaryFiles?: TemporaryFile[];
   onAddTemporaryFile?: (recordIndex: number, tempFile: TemporaryFile) => void;
   onRemoveTemporaryFile?: (tempFileId: string) => void;
+  // NEW: Control whether this section is in edit mode or view mode
+  isEditMode?: boolean;
 }
 
 export default function MedicalHistorySection({
@@ -41,9 +43,10 @@ export default function MedicalHistorySection({
   onAddDocument,
   onRemoveDocument,
   pendingFileDeletions = [],
-  temporaryFiles = [], // NEW: Temporary files
-  onAddTemporaryFile, // NEW: Handler for adding temporary files
-  onRemoveTemporaryFile, // NEW: Handler for removing temporary files
+  temporaryFiles = [],
+  onAddTemporaryFile,
+  onRemoveTemporaryFile,
+  isEditMode = true, // NEW: Default to edit mode
 }: MedicalHistorySectionProps) {
   const [isAddingRecord, setIsAddingRecord] = useState(false);
   const [isAddingDocument, setIsAddingDocument] = useState(false);
@@ -52,7 +55,7 @@ export default function MedicalHistorySection({
     document_urls: [],
     notes: "",
   });
-  // NEW: Local state for temporary files being added to the new record
+  // Local state for temporary files being added to the new record
   const [newRecordTemporaryFiles, setNewRecordTemporaryFiles] = useState<TemporaryFile[]>([]);
 
   const handleRecordChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -78,14 +81,14 @@ export default function MedicalHistorySection({
     setIsAddingDocument(false);
   };
 
-  // NEW: Handle temporary file addition for new record
+  // Handle temporary file addition for new record
   const handleAddTemporaryFileToNewRecord = (tempFile: TemporaryFile) => {
     console.log('MedicalHistorySection: Adding temporary file to new record:', tempFile);
     setNewRecordTemporaryFiles(prev => [...prev, tempFile]);
     setIsAddingDocument(false);
   };
 
-  // NEW: Handle temporary file removal for new record
+  // Handle temporary file removal for new record
   const handleRemoveTemporaryFileFromNewRecord = (tempFileId: string) => {
     console.log('MedicalHistorySection: Removing temporary file from new record:', tempFileId);
     setNewRecordTemporaryFiles(prev => 
@@ -106,27 +109,22 @@ export default function MedicalHistorySection({
       return;
     }
 
-    // NEW: When saving a new record, we need to handle temporary files
-    // For now, we'll add them to the record's document_urls as temporary placeholders
-    // They will be properly handled when the main save happens
-    const recordWithTempFiles = {
+    // FIXED: Don't add temp:// URLs to the record - they will be handled properly during save
+    const cleanRecord = {
       ...currentRecord,
-      // For now, we'll store temporary file IDs as special URLs that we can identify later
-      document_urls: [
-        ...(currentRecord.document_urls || []),
-        ...newRecordTemporaryFiles.map(tf => `temp://${tf.id}`)
-      ]
+      // Keep only actual document URLs, not temporary ones
+      document_urls: currentRecord.document_urls?.filter(url => !url.startsWith('temp://')) || []
     };
 
-    console.log('Saving new record with temporary files:', {
-      record: recordWithTempFiles,
+    console.log('Saving new record:', {
+      record: cleanRecord,
       temporaryFiles: newRecordTemporaryFiles
     });
 
-    onAddRecord(recordWithTempFiles);
+    onAddRecord(cleanRecord);
     
-    // NEW: Add temporary files to the main temporary files list with updated record index
-    if (onAddTemporaryFile && newRecordTemporaryFiles.length > 0) {
+    // Add temporary files to the main temporary files list with updated record index
+    if (onAddTemporaryFile && newRecordTemporaryFiles.length > 0 && isEditMode) {
       const newRecordIndex = historyRecords.length; // This will be the index of the new record
       newRecordTemporaryFiles.forEach(tempFile => {
         const updatedTempFile = { ...tempFile, recordIndex: newRecordIndex };
@@ -140,13 +138,13 @@ export default function MedicalHistorySection({
       document_urls: [],
       notes: "",
     });
-    setNewRecordTemporaryFiles([]); // NEW: Clear temporary files
+    setNewRecordTemporaryFiles([]);
     setIsAddingRecord(false);
     setIsAddingDocument(false);
   };
 
   const handleCancelRecord = () => {
-    // NEW: Clean up temporary files when canceling
+    // Clean up temporary files when canceling
     if (newRecordTemporaryFiles.length > 0) {
       console.log('Canceling record creation, cleaning up temporary files:', newRecordTemporaryFiles);
       // Revoke object URLs to prevent memory leaks
@@ -163,7 +161,7 @@ export default function MedicalHistorySection({
       document_urls: [],
       notes: "",
     });
-    setNewRecordTemporaryFiles([]); // NEW: Clear temporary files
+    setNewRecordTemporaryFiles([]);
     setIsAddingRecord(false);
     setIsAddingDocument(false);
   };
@@ -185,14 +183,14 @@ export default function MedicalHistorySection({
       .map(deletion => deletion.url);
   };
 
-  // NEW: Get temporary files for a specific record
+  // Get temporary files for a specific record
   const getTemporaryFilesForRecord = (recordIndex: number): TemporaryFile[] => {
     return temporaryFiles.filter(tempFile => tempFile.recordIndex === recordIndex);
   };
 
-  // NEW: Calculate totals for display
-  const totalPendingDeletions = pendingFileDeletions.length;
-  const totalPendingUploads = temporaryFiles.length + newRecordTemporaryFiles.length;
+  // FIXED: Calculate totals correctly - exclude temp files from deletion count in view mode
+  const totalPendingDeletions = isEditMode ? pendingFileDeletions.length : 0;
+  const totalPendingUploads = isEditMode ? (temporaryFiles.length + newRecordTemporaryFiles.length) : 0;
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
@@ -201,30 +199,34 @@ export default function MedicalHistorySection({
           <h2 className="text-xl text-blue-700 font-medium flex items-center gap-2">
             <span>📁</span> ประวัติการรักษาพยาบาล
           </h2>
-          {/* NEW: Enhanced status display */}
-          <div className="flex items-center space-x-3 mt-1">
-            {totalPendingDeletions > 0 && (
-              <p className="text-sm text-red-600">
-                {totalPendingDeletions} file(s) marked for deletion
-              </p>
-            )}
-            {totalPendingUploads > 0 && (
-              <p className="text-sm text-orange-600">
-                {totalPendingUploads} file(s) pending upload
-              </p>
-            )}
-          </div>
+          {/* FIXED: Enhanced status display - only show in edit mode */}
+          {isEditMode && (
+            <div className="flex items-center space-x-3 mt-1">
+              {totalPendingDeletions > 0 && (
+                <p className="text-sm text-red-600">
+                  {totalPendingDeletions} file(s) marked for deletion
+                </p>
+              )}
+              {totalPendingUploads > 0 && (
+                <p className="text-sm text-orange-600">
+                  {totalPendingUploads} file(s) pending upload
+                </p>
+              )}
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => setIsAddingRecord(true)}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center gap-1"
-        >
-          <span>+</span> เพิ่มประวัติ
-        </button>
+        {isEditMode && (
+          <button
+            onClick={() => setIsAddingRecord(true)}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center gap-1"
+          >
+            <span>+</span> เพิ่มประวัติ
+          </button>
+        )}
       </div>
 
-      {/* Add New Record Form */}
-      {isAddingRecord && (
+      {/* Add New Record Form - Only in edit mode */}
+      {isAddingRecord && isEditMode && (
         <div className="mb-6 bg-blue-50 p-5 rounded-xl border border-blue-100">
           <h3 className="text-lg font-medium text-blue-700 mb-4">
             เพิ่มเวชระเบียนใหม่
@@ -268,8 +270,8 @@ export default function MedicalHistorySection({
                   เอกสารที่แนบ
                 </label>
                 <div className="space-y-2 mb-3">
-                  {/* Regular uploaded documents */}
-                  {currentRecord.document_urls?.map((url, idx) => (
+                  {/* FIXED: Regular uploaded documents - exclude temp:// URLs */}
+                  {currentRecord.document_urls?.filter(url => !url.startsWith('temp://')).map((url, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-blue-100">
                       <span className="text-sm truncate max-w-xs">
                         {url.split("/").pop()}
@@ -283,7 +285,7 @@ export default function MedicalHistorySection({
                     </div>
                   ))}
                   
-                  {/* NEW: Temporary files */}
+                  {/* Temporary files */}
                   {newRecordTemporaryFiles.map((tempFile) => (
                     <div key={tempFile.id} className="flex justify-between items-center bg-orange-50 p-2 rounded border border-orange-200">
                       <div className="flex items-center space-x-2">
@@ -318,7 +320,7 @@ export default function MedicalHistorySection({
                   clinicId={clinicId || ""}
                   patientId={patientId}
                   recordIndex={-1} // Special index for new records
-                  onAddDocument={handleAddTemporaryFileToNewRecord} // NEW: Handle temporary files
+                  onAddDocument={handleAddTemporaryFileToNewRecord} // Handle temporary files
                   onCancel={() => setIsAddingDocument(false)}
                 />
               ) : (
@@ -361,7 +363,7 @@ export default function MedicalHistorySection({
         {historyRecords && historyRecords.length > 0 ? (
           historyRecords.map((record, index) => (
             <HistoryRecord
-              key={index}
+              key={`record_${index}_${record.timestamp}`} // FIXED: More stable key
               record={record}
               index={index}
               clinicId={clinicId}
@@ -372,9 +374,10 @@ export default function MedicalHistorySection({
               onRemoveDocument={onRemoveDocument}
               onUpdateNotes={handleUpdateRecordNotes}
               pendingDeletions={getPendingDeletionsForRecord(index)}
-              temporaryFiles={getTemporaryFilesForRecord(index)} // NEW: Pass record-specific temporary files
-              onAddTemporaryFile={onAddTemporaryFile} // NEW: Pass handler
-              onRemoveTemporaryFile={onRemoveTemporaryFile} // NEW: Pass handler
+              temporaryFiles={getTemporaryFilesForRecord(index)}
+              onAddTemporaryFile={onAddTemporaryFile}
+              onRemoveTemporaryFile={onRemoveTemporaryFile}
+              isEditMode={isEditMode} // FIXED: Pass edit mode to each record
             />
           ))
         ) : !isAddingRecord ? (
@@ -382,14 +385,19 @@ export default function MedicalHistorySection({
             <div className="text-5xl mb-3">📋</div>
             <p className="text-blue-700 mb-2">ไม่พบข้อมูลเวชระเบียน</p>
             <p className="text-blue-500 mb-4">
-              เพิ่มระเบียนใหม่เพื่อเริ่มติดตามประวัติผู้ป่วย
+              {isEditMode 
+                ? "เพิ่มระเบียนใหม่เพื่อเริ่มติดตามประวัติผู้ป่วย"
+                : "ยังไม่มีเวชระเบียนสำหรับผู้ป่วยนี้"
+              }
             </p>
-            <button
-              onClick={() => setIsAddingRecord(true)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
-            >
-              เพิ่มประวัติแรก
-            </button>
+            {isEditMode && (
+              <button
+                onClick={() => setIsAddingRecord(true)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+              >
+                เพิ่มประวัติแรก
+              </button>
+            )}
           </div>
         ) : null}
       </div>

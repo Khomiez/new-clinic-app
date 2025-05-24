@@ -1,12 +1,17 @@
-// src/app/api/upload/route.ts - Enhanced with proper Thai filename handling
+// src/app/api/upload/route.ts - FIXED: Better error handling and debugging
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadToCloudinary } from '@/utils/cloudinaryUploader';
+import { debugCloudinaryEnv } from '@/utils/cloudinaryConfig';
 import { dbConnect } from '@/db';
 import { isValidObjectId } from 'mongoose';
 import { Clinic } from '@/models';
 
 export async function POST(request: NextRequest) {
   try {
+    // Debug environment variables at the start
+    console.log('=== Upload API Route Debug ===');
+    debugCloudinaryEnv();
+    
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const clinicId = formData.get('clinicId') as string;
@@ -77,7 +82,8 @@ export async function POST(request: NextRequest) {
       originalFilename,
       clinicName: clinic.name,
       fileSize: file.size,
-      fileType: file.type
+      fileType: file.type,
+      clinicId
     });
 
     // Upload to Cloudinary
@@ -90,11 +96,14 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
+      console.error('Upload to Cloudinary failed:', result.error);
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 500 }
       );
     }
+
+    console.log('Upload successful:', result.url);
 
     return NextResponse.json({
       success: true,
@@ -107,9 +116,19 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (error: any) {
-    console.error('Upload error:', error);
+    console.error('Upload API error:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'File upload failed';
+    
+    if (error.message?.includes('Missing Cloudinary environment variables')) {
+      errorMessage = 'Server configuration error: Missing Cloudinary credentials';
+    } else if (error.message?.includes('Invalid')) {
+      errorMessage = error.message;
+    }
+    
     return NextResponse.json(
-      { success: false, error: 'File upload failed' },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
