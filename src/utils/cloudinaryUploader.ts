@@ -1,4 +1,4 @@
-// src/utils/cloudinaryUploader.ts - FIXED: Proper configuration and error handling
+// src/utils/cloudinaryUploader.ts - ENHANCED: Added detailed debugging
 import { v2 as cloudinary } from "cloudinary";
 import { configureCloudinary, debugCloudinaryEnv } from "./cloudinaryConfig";
 
@@ -123,68 +123,97 @@ export function getOriginalFilename(resource: CloudinaryResource): string {
 }
 
 /**
- * FIXED: Upload file to Cloudinary with proper configuration
+ * ENHANCED: Upload file to Cloudinary with detailed debugging
  */
 export async function uploadToCloudinary(
   file: Buffer,
   options: UploadOptions
 ): Promise<UploadResult> {
+  console.log('🚀 Starting uploadToCloudinary function...');
+  console.log('📊 Upload options:', {
+    clinicId: options.clinicId,
+    clinicName: options.clinicName,
+    filename: options.filename,
+    fileType: options.fileType,
+    patientId: options.patientId,
+    fileSize: file.length
+  });
+
   try {
-    // FIXED: Configure Cloudinary at runtime, not at module level
-    console.log('Configuring Cloudinary for upload...');
-    configureCloudinary();
+    // Step 1: Check environment variables
+    console.log('🔧 Step 1: Checking environment variables...');
+    const envVars = {
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      apiSecret: process.env.CLOUDINARY_API_SECRET ? '[SET]' : '[MISSING]'
+    };
+    console.log('📋 Environment variables:', envVars);
+
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      const missingVars = [];
+      if (!process.env.CLOUDINARY_CLOUD_NAME) missingVars.push('CLOUDINARY_CLOUD_NAME');
+      if (!process.env.CLOUDINARY_API_KEY) missingVars.push('CLOUDINARY_API_KEY');
+      if (!process.env.CLOUDINARY_API_SECRET) missingVars.push('CLOUDINARY_API_SECRET');
+      
+      console.error('❌ Missing environment variables:', missingVars);
+      debugCloudinaryEnv();
+      return {
+        success: false,
+        error: `Missing Cloudinary environment variables: ${missingVars.join(', ')}. Please check your .env.local file.`,
+      };
+    }
+
+    // Step 2: Configure Cloudinary
+    console.log('🔧 Step 2: Configuring Cloudinary...');
+    try {
+      configureCloudinary();
+      console.log('✅ Cloudinary configured successfully');
+    } catch (configError: any) {
+      console.error('❌ Cloudinary configuration failed:', configError);
+      return {
+        success: false,
+        error: `Cloudinary configuration failed: ${configError.message}`,
+      };
+    }
     
     const { clinicId, clinicName, filename = 'document', fileType, patientId } = options;
     
-    console.log('Upload options received:', {
-      clinicId,
-      clinicName,
-      originalFilename: filename,
-      fileType,
-      patientId,
-      fileSize: file.length
-    });
-    
-    // Create proper folder structure: clinic_management/<clinic_name>/
+    // Step 3: Prepare folder structure
+    console.log('📁 Step 3: Preparing folder structure...');
     const safeClinicName = createSafeClinicFolderName(clinicName);
     const folder = `clinic_management/${safeClinicName}`;
-    
-    console.log('Folder structure:', {
+    console.log('📁 Folder info:', {
       originalClinicName: clinicName,
       safeClinicName,
       finalFolder: folder
     });
     
-    // Create unique public ID with safe characters but preserve original in context
+    // Step 4: Create public ID
+    console.log('🏷️ Step 4: Creating public ID...');
     const timestamp = Date.now();
     const safeFilename = createSafePublicId(filename);
     const publicId = `${folder}/${safeFilename}_${timestamp}`;
-
-    console.log('Public ID creation:', {
+    console.log('🏷️ Public ID info:', {
       originalFilename: filename,
       safeFilename,
+      timestamp,
       publicId
     });
 
-    // Convert buffer to base64
+    // Step 5: Convert buffer to base64
+    console.log('🔄 Step 5: Converting file to base64...');
     const base64File = `data:${fileType || "application/octet-stream"};base64,${file.toString("base64")}`;
+    console.log('🔄 Base64 conversion complete, length:', base64File.length);
 
-    console.log('Starting Cloudinary upload...', {
-      folder,
-      publicId,
-      originalFilename: filename,
-      clinicName,
-      fileSize: file.length
-    });
-
-    // Upload to Cloudinary with comprehensive metadata
-    const result = await cloudinary.uploader.upload(base64File, {
+    // Step 6: Prepare upload options
+    console.log('⚙️ Step 6: Preparing upload options...');
+    const uploadOptions = {
       public_id: publicId,
-      resource_type: "auto",
+      resource_type: "auto" as const,
       context: {
         clinic_id: clinicId,
         clinic_name: clinicName,
-        original_filename: filename, // This preserves Thai characters exactly
+        original_filename: filename,
         patient_id: patientId || "general",
         upload_timestamp: new Date().toISOString(),
       },
@@ -192,18 +221,27 @@ export async function uploadToCloudinary(
         `clinic_${clinicId}`,
         "patient_documents",
         patientId ? `patient_${patientId}` : "general",
-        `filename:${filename}`, // Also store in tags as backup
+        `filename:${filename}`,
         "clinic_management"
       ],
       folder: folder,
-    });
+    };
+    console.log('⚙️ Upload options:', uploadOptions);
 
-    console.log('Cloudinary upload successful:', {
-      url: result.secure_url,
+    // Step 7: Upload to Cloudinary
+    console.log('☁️ Step 7: Uploading to Cloudinary...');
+    console.log('☁️ Starting cloudinary.uploader.upload...');
+    
+    const result = await cloudinary.uploader.upload(base64File, uploadOptions);
+    
+    console.log('✅ Cloudinary upload successful!');
+    console.log('📊 Upload result:', {
+      secure_url: result.secure_url,
       public_id: result.public_id,
       folder: result.folder,
-      original_filename: filename,
-      context: result.context
+      format: result.format,
+      bytes: result.bytes,
+      resource_type: result.resource_type
     });
 
     return {
@@ -213,11 +251,35 @@ export async function uploadToCloudinary(
       originalFilename: filename,
     };
   } catch (error: any) {
-    console.error("Cloudinary upload error:", error);
+    console.error('❌ uploadToCloudinary error occurred:');
+    console.error('❌ Error type:', error.constructor.name);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Error stack:', error.stack);
     
-    // Provide more specific error messages
+    // More specific error handling
+    if (error.message?.includes('Invalid API Key')) {
+      return {
+        success: false,
+        error: "Invalid Cloudinary API Key. Please check your CLOUDINARY_API_KEY in .env.local",
+      };
+    }
+    
+    if (error.message?.includes('Invalid API Secret')) {
+      return {
+        success: false,
+        error: "Invalid Cloudinary API Secret. Please check your CLOUDINARY_API_SECRET in .env.local",
+      };
+    }
+    
+    if (error.message?.includes('Must supply cloud_name')) {
+      return {
+        success: false,
+        error: "Missing Cloudinary Cloud Name. Please check your CLOUDINARY_CLOUD_NAME in .env.local",
+      };
+    }
+    
     if (error.message?.includes('Missing Cloudinary environment variables')) {
-      debugCloudinaryEnv(); // Debug environment variables
+      debugCloudinaryEnv();
       return {
         success: false,
         error: "Cloudinary configuration error. Please check your environment variables in .env.local",
@@ -226,7 +288,7 @@ export async function uploadToCloudinary(
     
     return {
       success: false,
-      error: error.message || "Upload failed",
+      error: `Upload failed: ${error.message}`,
     };
   }
 }
