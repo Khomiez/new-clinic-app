@@ -1,6 +1,6 @@
-// src/utils/cloudinaryUploader.ts - ENHANCED: Added detailed debugging
+// src/utils/cloudinaryUploader.ts - FIXED: Better environment handling
 import { v2 as cloudinary } from "cloudinary";
-import { configureCloudinary, debugCloudinaryEnv } from "./cloudinaryConfig";
+import { configureCloudinary, debugCloudinaryEnv, testCloudinaryConnection } from "./cloudinaryConfig";
 
 interface UploadOptions {
   clinicId: string;
@@ -123,58 +123,21 @@ export function getOriginalFilename(resource: CloudinaryResource): string {
 }
 
 /**
- * ENHANCED: Upload file to Cloudinary with detailed debugging
+ * ENHANCED: Upload file to Cloudinary with better error handling
  */
 export async function uploadToCloudinary(
   file: Buffer,
   options: UploadOptions
 ): Promise<UploadResult> {
   console.log('🚀 Starting uploadToCloudinary function...');
-  console.log('📊 Upload options:', {
-    clinicId: options.clinicId,
-    clinicName: options.clinicName,
-    filename: options.filename,
-    fileType: options.fileType,
-    patientId: options.patientId,
-    fileSize: file.length
-  });
 
   try {
-    // Step 1: Check environment variables
-    console.log('🔧 Step 1: Checking environment variables...');
-    const envVars = {
-      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-      apiKey: process.env.CLOUDINARY_API_KEY,
-      apiSecret: process.env.CLOUDINARY_API_SECRET ? '[SET]' : '[MISSING]'
-    };
-    console.log('📋 Environment variables:', envVars);
+    // Step 1: Configure Cloudinary (skip connection test for now)
+    console.log('🔧 Step 1: Configuring Cloudinary...');
 
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      const missingVars = [];
-      if (!process.env.CLOUDINARY_CLOUD_NAME) missingVars.push('CLOUDINARY_CLOUD_NAME');
-      if (!process.env.CLOUDINARY_API_KEY) missingVars.push('CLOUDINARY_API_KEY');
-      if (!process.env.CLOUDINARY_API_SECRET) missingVars.push('CLOUDINARY_API_SECRET');
-      
-      console.error('❌ Missing environment variables:', missingVars);
-      debugCloudinaryEnv();
-      return {
-        success: false,
-        error: `Missing Cloudinary environment variables: ${missingVars.join(', ')}. Please check your .env.local file.`,
-      };
-    }
-
-    // Step 2: Configure Cloudinary
+    // Step 2: Configure Cloudinary (this also checks env vars)
     console.log('🔧 Step 2: Configuring Cloudinary...');
-    try {
-      configureCloudinary();
-      console.log('✅ Cloudinary configured successfully');
-    } catch (configError: any) {
-      console.error('❌ Cloudinary configuration failed:', configError);
-      return {
-        success: false,
-        error: `Cloudinary configuration failed: ${configError.message}`,
-      };
-    }
+    const cloudinaryInstance = configureCloudinary();
     
     const { clinicId, clinicName, filename = 'document', fileType, patientId } = options;
     
@@ -182,23 +145,14 @@ export async function uploadToCloudinary(
     console.log('📁 Step 3: Preparing folder structure...');
     const safeClinicName = createSafeClinicFolderName(clinicName);
     const folder = `clinic_management/${safeClinicName}`;
-    console.log('📁 Folder info:', {
-      originalClinicName: clinicName,
-      safeClinicName,
-      finalFolder: folder
-    });
+    console.log('📁 Folder:', folder);
     
     // Step 4: Create public ID
     console.log('🏷️ Step 4: Creating public ID...');
     const timestamp = Date.now();
     const safeFilename = createSafePublicId(filename);
     const publicId = `${folder}/${safeFilename}_${timestamp}`;
-    console.log('🏷️ Public ID info:', {
-      originalFilename: filename,
-      safeFilename,
-      timestamp,
-      publicId
-    });
+    console.log('🏷️ Public ID:', publicId);
 
     // Step 5: Convert buffer to base64
     console.log('🔄 Step 5: Converting file to base64...');
@@ -225,24 +179,17 @@ export async function uploadToCloudinary(
         "clinic_management"
       ],
       folder: folder,
+      // Add timeout and retry settings
+      timeout: 60000, // 60 seconds
     };
-    console.log('⚙️ Upload options:', uploadOptions);
 
     // Step 7: Upload to Cloudinary
     console.log('☁️ Step 7: Uploading to Cloudinary...');
-    console.log('☁️ Starting cloudinary.uploader.upload...');
     
-    const result = await cloudinary.uploader.upload(base64File, uploadOptions);
+    const result = await cloudinaryInstance.uploader.upload(base64File, uploadOptions);
     
     console.log('✅ Cloudinary upload successful!');
-    console.log('📊 Upload result:', {
-      secure_url: result.secure_url,
-      public_id: result.public_id,
-      folder: result.folder,
-      format: result.format,
-      bytes: result.bytes,
-      resource_type: result.resource_type
-    });
+    console.log('📊 Upload result URL:', result.secure_url);
 
     return {
       success: true,
@@ -251,38 +198,51 @@ export async function uploadToCloudinary(
       originalFilename: filename,
     };
   } catch (error: any) {
-    console.error('❌ uploadToCloudinary error occurred:');
-    console.error('❌ Error type:', error.constructor.name);
-    console.error('❌ Error message:', error.message);
-    console.error('❌ Error stack:', error.stack);
+    console.error('❌ uploadToCloudinary error occurred:', error);
+    
+    // Debug environment on error
+    debugCloudinaryEnv();
     
     // More specific error handling
+    if (error.message?.includes('Must supply cloud_name')) {
+      return {
+        success: false,
+        error: "Cloudinary cloud name is missing. Check your CLOUDINARY_CLOUD_NAME environment variable.",
+      };
+    }
+    
+    if (error.message?.includes('Must supply api_key')) {
+      return {
+        success: false,
+        error: "Cloudinary API key is missing. Check your CLOUDINARY_API_KEY environment variable.",
+      };
+    }
+    
+    if (error.message?.includes('Must supply api_secret')) {
+      return {
+        success: false,
+        error: "Cloudinary API secret is missing. Check your CLOUDINARY_API_SECRET environment variable.",
+      };
+    }
+    
     if (error.message?.includes('Invalid API Key')) {
       return {
         success: false,
-        error: "Invalid Cloudinary API Key. Please check your CLOUDINARY_API_KEY in .env.local",
+        error: "Invalid Cloudinary API Key. Please verify your CLOUDINARY_API_KEY value.",
       };
     }
     
     if (error.message?.includes('Invalid API Secret')) {
       return {
         success: false,
-        error: "Invalid Cloudinary API Secret. Please check your CLOUDINARY_API_SECRET in .env.local",
+        error: "Invalid Cloudinary API Secret. Please verify your CLOUDINARY_API_SECRET value.",
       };
     }
     
-    if (error.message?.includes('Must supply cloud_name')) {
+    if (error.message?.includes('timeout')) {
       return {
         success: false,
-        error: "Missing Cloudinary Cloud Name. Please check your CLOUDINARY_CLOUD_NAME in .env.local",
-      };
-    }
-    
-    if (error.message?.includes('Missing Cloudinary environment variables')) {
-      debugCloudinaryEnv();
-      return {
-        success: false,
-        error: "Cloudinary configuration error. Please check your environment variables in .env.local",
+        error: "Upload timeout. Please try again with a smaller file or check your internet connection.",
       };
     }
     
