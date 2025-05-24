@@ -1,10 +1,22 @@
-// src/utils/index.ts - Updated exports for simplified utilities
+// src/utils/index.ts - Updated exports with proper type handling for isolatedModules
 export * from './mongoHelpers';
 export * from './paginationHelpers';
-
-// New simplified file utilities - replaces fileHelpers.ts and thaiFilenameFixUtils.ts
 export * from './fileUtils';
-
-// Keep only if still needed elsewhere, otherwise remove
 export * from './getPatientModel';
 export * from './cloudinaryConfig';
+
+// Export temporary file storage utilities with proper type exports
+export type {
+  TemporaryFile,
+  PendingUpload
+} from './temporaryFileStorage';
+
+export {
+  createTemporaryFile,
+  createFilePreviewUrl,
+  revokeFilePreviewUrl,
+  isTemporaryFileUrl,
+  getFileExtension,
+  validateFile,
+  canPreviewFile
+} from './temporaryFileStorage';

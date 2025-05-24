@@ -1,8 +1,9 @@
-// src/components/ui/HistoryRecord.tsx - FIXED: Local deletion marking only
+// src/components/ui/HistoryRecord.tsx - UPDATED: Support for temporary files
 "use client";
 
 import React, { useState } from "react";
 import { IHistoryRecord } from "@/interfaces";
+import { TemporaryFile } from "@/utils/temporaryFileStorage";
 import DocumentUpload from "./DocumentUpload";
 import EnhancedFileList from "./EnhancedFileList";
 import { ThaiDatePicker } from "@/components";
@@ -17,8 +18,11 @@ interface HistoryRecordProps {
   onAddDocument: (index: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
   onUpdateNotes: (index: number, notes: string) => void;
-  // NEW: Optional prop to show pending deletions for this record
   pendingDeletions?: string[];
+  // NEW: Temporary file support
+  temporaryFiles?: TemporaryFile[];
+  onAddTemporaryFile?: (recordIndex: number, tempFile: TemporaryFile) => void;
+  onRemoveTemporaryFile?: (tempFileId: string) => void;
 }
 
 export default function HistoryRecord({
@@ -31,7 +35,10 @@ export default function HistoryRecord({
   onAddDocument,
   onRemoveDocument,
   onUpdateNotes,
-  pendingDeletions = [], // NEW: Track pending deletions
+  pendingDeletions = [],
+  temporaryFiles = [], // NEW: Temporary files for this record
+  onAddTemporaryFile, // NEW: Handler for adding temporary files
+  onRemoveTemporaryFile, // NEW: Handler for removing temporary files
 }: HistoryRecordProps) {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -55,14 +62,11 @@ export default function HistoryRecord({
     setIsEditingDate(false);
   };
 
-  // Proper notes saving functionality
   const handleNotesSubmit = () => {
-    // Call the parent component's update handler
     onUpdateNotes(index, notesValue);
     setIsEditingNotes(false);
   };
 
-  // Reset notes value if user cancels
   const handleCancelNotesEdit = () => {
     setNotesValue(record.notes || "");
     setIsEditingNotes(false);
@@ -76,12 +80,21 @@ export default function HistoryRecord({
     setIsAddingDocument(true);
   };
 
+  // NEW: Handle temporary file addition
+  const handleTemporaryFileAdded = (tempFile: TemporaryFile) => {
+    console.log('HistoryRecord: Received temporary file:', tempFile);
+    if (onAddTemporaryFile) {
+      onAddTemporaryFile(index, tempFile);
+    }
+    setIsAddingDocument(false);
+  };
+
+  // LEGACY: Handle regular upload completion (if needed for backward compatibility)
   const handleUploadComplete = (url: string) => {
     onAddDocument(index, url);
     setIsAddingDocument(false);
   };
 
-  // FIXED: Only marks for local deletion, no immediate Cloudinary deletion
   const handleDeleteDocument = (url: string, docIndex: number) => {
     console.log('HistoryRecord: Marking document for deletion:', {
       recordIndex: index,
@@ -89,9 +102,26 @@ export default function HistoryRecord({
       url
     });
     
-    // Simply call parent handler - no confirmation needed as EnhancedFileList handles it
     onRemoveDocument(index, docIndex);
   };
+
+  // NEW: Handle temporary file removal
+  const handleDeleteTemporaryFile = (tempFileId: string) => {
+    console.log('HistoryRecord: Removing temporary file:', tempFileId);
+    if (onRemoveTemporaryFile) {
+      onRemoveTemporaryFile(tempFileId);
+    }
+  };
+
+  // NEW: Get temporary files for this specific record
+  const recordTemporaryFiles = temporaryFiles.filter(
+    (tempFile) => tempFile.recordIndex === index
+  );
+
+  // NEW: Calculate total files (existing + temporary)
+  const totalFiles = (record.document_urls?.length || 0) + recordTemporaryFiles.length;
+  const totalPendingDeletions = pendingDeletions.length;
+  const totalPendingUploads = recordTemporaryFiles.length;
 
   return (
     <div className="bg-white rounded-xl p-4 border border-blue-100 mb-4 shadow-sm">
@@ -198,12 +228,25 @@ export default function HistoryRecord({
           <div className="flex items-center">
             <span className="text-blue-400 mr-1">📁</span>
             <h4 className="font-medium text-blue-600">Documents</h4>
-            {/* NEW: Show pending deletion count for this record */}
-            {pendingDeletions.length > 0 && (
-              <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">
-                {pendingDeletions.length} pending deletion
-              </span>
-            )}
+            
+            {/* NEW: Enhanced status indicators */}
+            <div className="ml-2 flex items-center space-x-2">
+              {totalFiles > 0 && (
+                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
+                  {totalFiles} file{totalFiles > 1 ? 's' : ''}
+                </span>
+              )}
+              {totalPendingDeletions > 0 && (
+                <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                  {totalPendingDeletions} pending deletion
+                </span>
+              )}
+              {totalPendingUploads > 0 && (
+                <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">
+                  {totalPendingUploads} pending upload
+                </span>
+              )}
+            </div>
           </div>
           <button
             onClick={handleAddDocumentClick}
@@ -220,20 +263,23 @@ export default function HistoryRecord({
             <DocumentUpload
               clinicId={clinicId}
               patientId={patientId}
-              onAddDocument={handleUploadComplete}
+              recordIndex={index} // NEW: Pass record index
+              onAddDocument={handleTemporaryFileAdded} // NEW: Handle temporary files
               onCancel={() => setIsAddingDocument(false)}
             />
           </div>
         )}
 
-        {/* Documents List - FIXED: Pass pending deletions and no immediate Cloudinary deletion */}
+        {/* Documents List - UPDATED: Pass temporary files */}
         <EnhancedFileList
           fileUrls={record.document_urls || []}
           clinicId={clinicId || ""}
           onDeleteFile={handleDeleteDocument}
           showActions={true}
           compact={false}
-          pendingDeletions={pendingDeletions} // NEW: Pass pending deletion URLs
+          pendingDeletions={pendingDeletions}
+          temporaryFiles={recordTemporaryFiles} // NEW: Pass record-specific temporary files
+          onDeleteTemporaryFile={handleDeleteTemporaryFile} // NEW: Handle temporary file deletion
         />
       </div>
     </div>

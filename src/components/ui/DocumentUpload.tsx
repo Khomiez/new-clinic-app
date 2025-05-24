@@ -1,27 +1,32 @@
-// src/components/ui/DocumentUpload.tsx - Simplified document upload wrapper
+// src/components/ui/DocumentUpload.tsx - UPDATED: Handle temporary storage instead of immediate upload
 "use client";
 
 import React, { useState } from "react";
 import FileUploader from "./FileUploader";
+import { TemporaryFile } from "@/utils/temporaryFileStorage";
 
 interface DocumentUploadProps {
   clinicId: string;
   patientId?: string;
-  onAddDocument: (url: string) => void;
+  recordIndex: number; // NEW: Required for temporary storage
+  onAddDocument: (tempFile: TemporaryFile) => void; // NEW: Changed signature
   onCancel: () => void;
 }
 
 export default function DocumentUpload({
   clinicId,
   patientId,
-  onAddDocument,
+  recordIndex, // NEW: Track which record this file belongs to
+  onAddDocument, // NEW: Now receives TemporaryFile instead of URL
   onCancel,
 }: DocumentUploadProps) {
   const [error, setError] = useState<string | null>(null);
 
-  const handleUploadComplete = (url: string) => {
+  // NEW: Handle temporary file addition instead of upload completion
+  const handleFileAdded = (tempFile: TemporaryFile) => {
     setError(null);
-    onAddDocument(url);
+    console.log('DocumentUpload: Received temporary file:', tempFile);
+    onAddDocument(tempFile);
   };
 
   const handleUploadError = (errorMessage: string) => {
@@ -48,10 +53,20 @@ export default function DocumentUpload({
 
   return (
     <div className="p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
+      <div className="mb-3">
+        <h4 className="text-sm font-medium text-blue-700 mb-1">
+          Add Document to Medical Record
+        </h4>
+        <p className="text-xs text-blue-500">
+          Files will be stored temporarily and uploaded when you save changes.
+        </p>
+      </div>
+
       <FileUploader
         clinicId={clinicId}
         patientId={patientId}
-        onUploadComplete={handleUploadComplete}
+        recordIndex={recordIndex} // NEW: Pass record index
+        onFileAdded={handleFileAdded} // NEW: Changed from onUploadComplete
         onUploadError={handleUploadError}
         onCancel={onCancel}
       />

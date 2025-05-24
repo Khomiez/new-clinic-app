@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - FIXED: Proper file deletion flow
+// src/app/(protected)/patients/edit/[id]/page.tsx - UPDATED: Complete temporary file upload support
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -12,6 +12,8 @@ import {
   ThaiDatePicker,
 } from "@/components";
 import { IPatient, IClinic, IHistoryRecord } from "@/interfaces";
+import { TemporaryFile, revokeFilePreviewUrl } from "@/utils/temporaryFileStorage";
+import { uploadToCloudinary } from "@/utils/cloudinaryUploader";
 import { useAppSelector } from "@/redux/hooks/useAppSelector";
 import { useAppDispatch } from "@/redux/hooks/useAppDispatch";
 import {
@@ -28,7 +30,7 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-// NEW: Interface for tracking pending file deletions
+// Interface for tracking pending file deletions
 interface PendingFileDeletion {
   recordIndex: number;
   documentIndex: number;
@@ -70,10 +72,13 @@ export default function EditPatient({ params }: PageProps) {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // NEW: State for tracking pending file deletions
+  // State for tracking pending file operations
   const [pendingFileDeletions, setPendingFileDeletions] = useState<
     PendingFileDeletion[]
   >([]);
+  
+  // NEW: State for tracking temporary files (pending uploads)
+  const [temporaryFiles, setTemporaryFiles] = useState<TemporaryFile[]>([]);
 
   // State for clinics
   const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(
@@ -159,20 +164,22 @@ export default function EditPatient({ params }: PageProps) {
       setOriginalPatient(JSON.parse(JSON.stringify(patientData))); // Deep copy
       setHasUnsavedChanges(false);
 
-      // NEW: Clear pending deletions when loading fresh data
+      // Clear pending operations when loading fresh data
       setPendingFileDeletions([]);
+      setTemporaryFiles([]); // NEW: Clear temporary files
     }
   }, [patientFromStore, patientLoading]);
 
-  // NEW: Check for unsaved changes including pending deletions
+  // NEW: Check for unsaved changes including pending operations
   useEffect(() => {
     if (originalPatient && patient) {
       const hasDataChanges =
         JSON.stringify(patient) !== JSON.stringify(originalPatient);
       const hasPendingDeletions = pendingFileDeletions.length > 0;
-      setHasUnsavedChanges(hasDataChanges || hasPendingDeletions);
+      const hasPendingUploads = temporaryFiles.length > 0; // NEW: Check temporary files
+      setHasUnsavedChanges(hasDataChanges || hasPendingDeletions || hasPendingUploads);
     }
-  }, [patient, originalPatient, pendingFileDeletions]);
+  }, [patient, originalPatient, pendingFileDeletions, temporaryFiles]);
 
   // Handle browser refresh/close with unsaved changes
   useEffect(() => {
@@ -188,6 +195,18 @@ export default function EditPatient({ params }: PageProps) {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
+
+  // NEW: Cleanup temporary files on unmount
+  useEffect(() => {
+    return () => {
+      // Clean up object URLs to prevent memory leaks
+      temporaryFiles.forEach(tempFile => {
+        if (tempFile.previewUrl) {
+          revokeFilePreviewUrl(tempFile.previewUrl);
+        }
+      });
+    };
+  }, []);
 
   // Handle input changes for patient info
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,14 +226,50 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // NEW: Helper function to actually delete files from Cloudinary
+  // NEW: Helper function to upload temporary files to Cloudinary
+  const uploadTemporaryFiles = async (tempFiles: TemporaryFile[]): Promise<string[]> => {
+    if (!selectedClinic || tempFiles.length === 0) return [];
+
+    const uploadPromises = tempFiles.map(async (tempFile) => {
+      try {
+        console.log('Uploading temporary file:', tempFile.filename);
+        
+        // Convert File to Buffer
+        const arrayBuffer = await tempFile.file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Upload to Cloudinary
+        const result = await uploadToCloudinary(buffer, {
+          clinicId: toIdString(selectedClinic._id),
+          clinicName: selectedClinic.name,
+          filename: tempFile.filename,
+          fileType: tempFile.type,
+          patientId: patientId || undefined,
+        });
+
+        if (!result.success) {
+          throw new Error(result.error || 'Upload failed');
+        }
+
+        console.log('Successfully uploaded:', tempFile.filename, '-> URL:', result.url);
+        return result.url!;
+      } catch (error) {
+        console.error('Failed to upload temporary file:', tempFile.filename, error);
+        throw new Error(`Failed to upload ${tempFile.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    });
+
+    return Promise.all(uploadPromises);
+  };
+
+  // Helper function to actually delete files from Cloudinary
   const deleteFilesFromCloudinary = async (urls: string[]): Promise<void> => {
     if (!selectedClinic || urls.length === 0) return;
 
     try {
       console.log("Deleting files from Cloudinary:", urls);
 
-      // Delete files one by one (you could also implement batch delete)
+      // Delete files one by one
       for (const url of urls) {
         const deleteResponse = await fetch(
           `/api/clinic/${toIdString(
@@ -241,7 +296,35 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // UPDATED: Save handler with proper file deletion
+  // NEW: Process patient data to replace temporary file placeholders with actual URLs
+  const processPatientDataForSave = (patientData: Partial<IPatient>, uploadedUrls: string[]): Partial<IPatient> => {
+    if (!patientData.history) return patientData;
+
+    let urlIndex = 0;
+    const processedHistory = patientData.history.map(record => {
+      if (!record.document_urls) return record;
+
+      const processedUrls = record.document_urls.map(url => {
+        if (url.startsWith('temp://')) {
+          // Replace temporary URL with actual Cloudinary URL
+          return uploadedUrls[urlIndex++];
+        }
+        return url;
+      });
+
+      return {
+        ...record,
+        document_urls: processedUrls
+      };
+    });
+
+    return {
+      ...patientData,
+      history: processedHistory
+    };
+  };
+
+  // UPDATED: Save handler with proper file upload and deletion
   const handleSave = async () => {
     if (!patient._id || !clinicId) {
       alert("Missing patient ID or clinic ID");
@@ -257,7 +340,23 @@ export default function EditPatient({ params }: PageProps) {
     setIsSaving(true);
 
     try {
-      // NEW: First, delete files from Cloudinary that are marked for deletion
+      console.log('Starting save process...', {
+        pendingDeletions: pendingFileDeletions.length,
+        temporaryFiles: temporaryFiles.length
+      });
+
+      // Step 1: Upload temporary files to Cloudinary
+      let uploadedUrls: string[] = [];
+      if (temporaryFiles.length > 0) {
+        console.log('Uploading temporary files to Cloudinary...');
+        uploadedUrls = await uploadTemporaryFiles(temporaryFiles);
+        console.log('Upload completed. URLs:', uploadedUrls);
+      }
+
+      // Step 2: Process patient data to replace temporary URLs with real ones
+      const processedPatientData = processPatientDataForSave(patient, uploadedUrls);
+
+      // Step 3: Delete files from Cloudinary that are marked for deletion
       if (pendingFileDeletions.length > 0) {
         const urlsToDelete = pendingFileDeletions.map(
           (deletion) => deletion.url
@@ -268,33 +367,44 @@ export default function EditPatient({ params }: PageProps) {
         );
       }
 
-      // Save patient data to database
+      // Step 4: Save patient data to database
       await dispatch(
         updatePatient({
           patientId: toIdString(patient._id),
           clinicId,
-          patientData: patient,
+          patientData: processedPatientData,
         })
       ).unwrap();
 
-      // Update original state to current state
-      setOriginalPatient(JSON.parse(JSON.stringify(patient)));
+      // Step 5: Update original state to current state
+      setOriginalPatient(JSON.parse(JSON.stringify(processedPatientData)));
 
-      // NEW: Clear pending deletions after successful save
+      // Step 6: Clear pending operations after successful save
       setPendingFileDeletions([]);
+      
+      // Clean up temporary files
+      temporaryFiles.forEach(tempFile => {
+        if (tempFile.previewUrl) {
+          revokeFilePreviewUrl(tempFile.previewUrl);
+        }
+      });
+      setTemporaryFiles([]);
+      
       setHasUnsavedChanges(false);
+
+      console.log('Save process completed successfully');
 
       // Navigate back to dashboard after successful update
       router.push(`/dashboard`);
     } catch (error: any) {
-      console.error("Failed to update patient:", error);
+      console.error("Failed to save patient:", error);
       alert(`Failed to save changes: ${error.message || "Unknown error"}`);
     } finally {
       setIsSaving(false);
     }
   };
 
-  // UPDATED: Handle discard changes with pending deletions
+  // UPDATED: Handle discard changes with pending operations
   const handleDiscard = async () => {
     if (hasUnsavedChanges) {
       setShowDiscardConfirmation(true);
@@ -303,15 +413,24 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
-  // UPDATED: Confirm discard changes with pending deletions
+  // UPDATED: Confirm discard changes with pending operations
   const confirmDiscard = async () => {
     // Reset to original state
     if (originalPatient) {
       setPatient(JSON.parse(JSON.stringify(originalPatient)));
     }
 
-    // NEW: Clear pending deletions (files will remain in Cloudinary)
+    // Clear pending operations
     setPendingFileDeletions([]);
+    
+    // NEW: Clean up temporary files
+    temporaryFiles.forEach(tempFile => {
+      if (tempFile.previewUrl) {
+        revokeFilePreviewUrl(tempFile.previewUrl);
+      }
+    });
+    setTemporaryFiles([]);
+    
     setHasUnsavedChanges(false);
     setShowDiscardConfirmation(false);
     router.push(`/dashboard`);
@@ -368,12 +487,16 @@ export default function EditPatient({ params }: PageProps) {
     });
   };
 
-  // Simplified record removal
   const handleRemoveRecord = async (index: number) => {
     if (confirm("Are you sure you want to delete this medical record?")) {
-      // NEW: When removing a record, also remove any pending deletions for that record
+      // When removing a record, also remove any pending operations for that record
       setPendingFileDeletions((prev) =>
         prev.filter((deletion) => deletion.recordIndex !== index)
+      );
+      
+      // NEW: Remove temporary files for this record
+      setTemporaryFiles((prev) =>
+        prev.filter((tempFile) => tempFile.recordIndex !== index)
       );
 
       setPatient((prev) => {
@@ -435,7 +558,7 @@ export default function EditPatient({ params }: PageProps) {
     });
   };
 
-  // NEW: Updated document removal handler - only marks for deletion
+  // Document removal handler - marks for deletion
   const handleRemoveDocument = async (
     recordIndex: number,
     documentIndex: number
@@ -457,7 +580,7 @@ export default function EditPatient({ params }: PageProps) {
       filename,
     });
 
-    // NEW: Add to pending deletions instead of deleting immediately
+    // Add to pending deletions
     setPendingFileDeletions((prev) => [
       ...prev,
       {
@@ -491,16 +614,71 @@ export default function EditPatient({ params }: PageProps) {
     });
   };
 
-  // NEW: Helper function to check if a file is pending deletion
-  const isFilePendingDeletion = (
-    recordIndex: number,
-    documentIndex: number
-  ): boolean => {
-    return pendingFileDeletions.some(
-      (deletion) =>
-        deletion.recordIndex === recordIndex &&
-        deletion.documentIndex === documentIndex
-    );
+  // NEW: Handle temporary file addition
+  const handleAddTemporaryFile = (recordIndex: number, tempFile: TemporaryFile) => {
+    console.log('Adding temporary file:', { recordIndex, tempFile });
+    
+    // Add to temporary files list
+    setTemporaryFiles(prev => [...prev, tempFile]);
+
+    // Add placeholder URL to patient data
+    setPatient((prev) => {
+      if (!prev.history) return prev;
+
+      const updatedHistory = [...prev.history];
+      const record = updatedHistory[recordIndex];
+
+      if (!record) return prev;
+
+      updatedHistory[recordIndex] = {
+        ...record,
+        document_urls: [...(record.document_urls || []), `temp://${tempFile.id}`],
+      };
+
+      return {
+        ...prev,
+        history: updatedHistory,
+      };
+    });
+  };
+
+  // NEW: Handle temporary file removal
+  const handleRemoveTemporaryFile = (tempFileId: string) => {
+    console.log('Removing temporary file:', tempFileId);
+    
+    // Find and remove the temporary file
+    const tempFile = temporaryFiles.find(tf => tf.id === tempFileId);
+    if (tempFile) {
+      // Clean up preview URL
+      if (tempFile.previewUrl) {
+        revokeFilePreviewUrl(tempFile.previewUrl);
+      }
+      
+      // Remove from temporary files list
+      setTemporaryFiles(prev => prev.filter(tf => tf.id !== tempFileId));
+
+      // Remove placeholder URL from patient data
+      setPatient((prev) => {
+        if (!prev.history) return prev;
+
+        const updatedHistory = [...prev.history];
+        const record = updatedHistory[tempFile.recordIndex];
+
+        if (!record || !record.document_urls) return prev;
+
+        updatedHistory[tempFile.recordIndex] = {
+          ...record,
+          document_urls: record.document_urls.filter(
+            url => url !== `temp://${tempFileId}`
+          ),
+        };
+
+        return {
+          ...prev,
+          history: updatedHistory,
+        };
+      });
+    }
   };
 
   // Show loading screen while resolving params or loading data
@@ -574,6 +752,11 @@ export default function EditPatient({ params }: PageProps) {
                     • {pendingFileDeletions.length} file(s) marked for deletion
                   </li>
                 )}
+                {temporaryFiles.length > 0 && (
+                  <li>
+                    • {temporaryFiles.length} file(s) pending upload
+                  </li>
+                )}
               </ul>
               <p className="text-gray-700 mt-3">
                 Are you sure you want to continue?
@@ -625,15 +808,19 @@ export default function EditPatient({ params }: PageProps) {
               <p className="text-slate-500">
                 ปรับปรุงข้อมูลผู้ป่วยและประวัติการรักษา
               </p>
-              {/* NEW: Show pending deletions info */}
-              {pendingFileDeletions.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded">
-                    {pendingFileDeletions.length} file(s) marked for deletion -
-                    will be removed when you save
+              {/* NEW: Enhanced status display */}
+              <div className="flex items-center space-x-3 mt-2">
+                {pendingFileDeletions.length > 0 && (
+                  <p className="text-sm text-red-600 bg-red-50 px-2 py-1 rounded">
+                    {pendingFileDeletions.length} file(s) marked for deletion
                   </p>
-                </div>
-              )}
+                )}
+                {temporaryFiles.length > 0 && (
+                  <p className="text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                    {temporaryFiles.length} file(s) pending upload
+                  </p>
+                )}
+              </div>
             </div>
             <div className="flex gap-3">
               <button
@@ -754,6 +941,14 @@ export default function EditPatient({ params }: PageProps) {
                       <span className="font-bold">Note:</span> ใช้ปุ่ม "save
                       changes"
                       ด้านบนเพื่อบันทึกข้อมูลผู้ป่วยและประวัติการรักษาทั้งหมด
+                      {temporaryFiles.length > 0 && (
+                        <>
+                          <br />
+                          <span className="text-orange-600 font-medium">
+                            ⚠️ Files will be uploaded when you save changes
+                          </span>
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -775,6 +970,9 @@ export default function EditPatient({ params }: PageProps) {
                 onAddDocument={handleAddDocument}
                 onRemoveDocument={handleRemoveDocument}
                 pendingFileDeletions={pendingFileDeletions}
+                temporaryFiles={temporaryFiles} // NEW: Pass temporary files
+                onAddTemporaryFile={handleAddTemporaryFile} // NEW: Pass handler
+                onRemoveTemporaryFile={handleRemoveTemporaryFile} // NEW: Pass handler
               />
             </div>
           </div>

@@ -1,12 +1,14 @@
-// src/components/ui/FileUploader.tsx - Enhanced with proper error handling and cancellation
+// src/components/ui/FileUploader.tsx - UPDATED: Store files temporarily instead of immediate upload
 "use client";
 
 import React, { useState, useRef } from "react";
+import { createTemporaryFile, validateFile, TemporaryFile } from "@/utils/temporaryFileStorage";
 
 interface FileUploaderProps {
   clinicId: string;
   patientId?: string;
-  onUploadComplete: (fileUrl: string) => void;
+  recordIndex: number; // NEW: Required for temporary storage
+  onFileAdded: (tempFile: TemporaryFile) => void; // NEW: Changed from onUploadComplete
   onUploadError?: (error: string) => void;
   onCancel?: () => void;
   maxSizeMB?: number;
@@ -17,63 +19,34 @@ interface FileUploaderProps {
 export default function FileUploader({
   clinicId,
   patientId,
-  onUploadComplete,
+  recordIndex, // NEW: Track which record this file belongs to
+  onFileAdded, // NEW: Just add to temporary storage
   onUploadError,
   onCancel,
   maxSizeMB = 10,
   allowedTypes = "image/*,.pdf,.doc,.docx,.xls,.xlsx",
   disabled = false
 }: FileUploaderProps) {
-  const [isUploading, setIsUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   const resetUploader = () => {
     setSelectedFile(null);
-    setProgress(0);
     setUploadError(null);
-    setIsUploading(false);
+    setIsProcessing(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-  };
-
-  const validateFile = (file: File): string | null => {
-    // Check file size
-    if (file.size > maxSizeMB * 1024 * 1024) {
-      return `File size exceeds ${maxSizeMB}MB limit`;
-    }
-
-    // Check file type
-    const allowedTypesArray = allowedTypes.split(',').map(type => type.trim());
-    const fileExtension = `.${file.name.split('.').pop()?.toLowerCase()}`;
-    const isAllowed = allowedTypesArray.some(type => {
-      if (type.includes('*')) {
-        return file.type.startsWith(type.replace('*', ''));
-      }
-      return type === fileExtension || file.type === type;
-    });
-
-    if (!isAllowed) {
-      return `File type not supported. Allowed types: ${allowedTypes}`;
-    }
-
-    return null;
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const validationError = validateFile(file);
+    const validationError = validateFile(file, maxSizeMB);
     if (validationError) {
       setUploadError(validationError);
       onUploadError?.(validationError);
@@ -82,106 +55,61 @@ export default function FileUploader({
 
     setSelectedFile(file);
     setUploadError(null);
-    await uploadFile(file);
+    await processFile(file);
   };
 
-  const uploadFile = async (file: File) => {
+  // NEW: Process file for temporary storage instead of uploading
+  const processFile = async (file: File) => {
     if (!clinicId) {
-      const error = "Clinic ID is required for upload";
+      const error = "Clinic ID is required";
       setUploadError(error);
       onUploadError?.(error);
       return;
     }
 
-    setIsUploading(true);
-    setProgress(0);
+    setIsProcessing(true);
     setUploadError(null);
 
-    // Create abort controller for cancellation
-    abortControllerRef.current = new AbortController();
-
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("clinicId", clinicId);
-      if (patientId) formData.append("patientId", patientId);
-
-      console.log('Starting upload:', {
+      console.log('Processing file for temporary storage:', {
         filename: file.name,
         size: file.size,
         type: file.type,
-        clinicId,
-        patientId
+        recordIndex,
+        clinicId
       });
 
-      // Simulate progress for better UX
-      const progressInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 90) return prev;
-          return prev + Math.random() * 10;
-        });
-      }, 200);
-
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-        signal: abortControllerRef.current.signal,
-      });
-
-      clearInterval(progressInterval);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
-      }
-
-      const data = await response.json();
+      // NEW: Create temporary file object instead of uploading
+      const tempFile = createTemporaryFile(file, recordIndex);
       
-      if (!data.success || !data.file?.url) {
-        throw new Error(data.error || "Invalid response from server");
-      }
+      console.log('Created temporary file:', tempFile);
 
-      setProgress(100);
-      
-      console.log('Upload successful:', {
-        url: data.file.url,
-        filename: data.file.filename
-      });
-
-      onUploadComplete(data.file.url);
+      // NEW: Call parent handler with temporary file
+      onFileAdded(tempFile);
       resetUploader();
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.log('Upload cancelled by user');
-        setUploadError("Upload cancelled");
-      } else {
-        console.error('Upload error:', error);
-        const errorMessage = error.message || "Upload failed";
-        setUploadError(errorMessage);
-        onUploadError?.(errorMessage);
-      }
+      console.error('File processing error:', error);
+      const errorMessage = error.message || "File processing failed";
+      setUploadError(errorMessage);
+      onUploadError?.(errorMessage);
     } finally {
-      setIsUploading(false);
-      abortControllerRef.current = null;
+      setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
-    if (isUploading && abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
     resetUploader();
     onCancel?.();
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (disabled || isUploading) return;
+    if (disabled || isProcessing) return;
 
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       const file = files[0];
-      const validationError = validateFile(file);
+      const validationError = validateFile(file, maxSizeMB);
       if (validationError) {
         setUploadError(validationError);
         onUploadError?.(validationError);
@@ -189,7 +117,7 @@ export default function FileUploader({
       }
       setSelectedFile(file);
       setUploadError(null);
-      uploadFile(file);
+      processFile(file);
     }
   };
 
@@ -202,14 +130,14 @@ export default function FileUploader({
       {/* Upload Area */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-blue-700 mb-2">
-          Upload Document
+          Add Document
         </label>
         
         <div
           className={`
             flex items-center justify-center w-full h-32 
             border-2 border-dashed rounded-lg cursor-pointer transition-colors
-            ${isUploading || disabled
+            ${isProcessing || disabled
               ? "border-blue-300 bg-blue-50 opacity-50 cursor-not-allowed" 
               : "border-blue-300 bg-blue-50 hover:bg-blue-100"
             }
@@ -221,10 +149,10 @@ export default function FileUploader({
           <label className="cursor-pointer flex flex-col items-center w-full h-full justify-center">
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <span className="text-3xl mb-2">
-                {isUploading ? "⏳" : "📄"}
+                {isProcessing ? "⏳" : "📄"}
               </span>
               
-              {selectedFile && !isUploading ? (
+              {selectedFile && !isProcessing ? (
                 <div className="text-center">
                   <p className="text-sm font-medium text-blue-700">
                     {selectedFile.name}
@@ -233,22 +161,25 @@ export default function FileUploader({
                     {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                   </p>
                 </div>
-              ) : isUploading ? (
+              ) : isProcessing ? (
                 <div className="text-center">
                   <p className="text-sm font-medium text-blue-700">
-                    Uploading: {selectedFile?.name}
+                    Processing: {selectedFile?.name}
                   </p>
                   <p className="text-xs text-blue-500">
-                    {progress.toFixed(0)}% complete
+                    Adding to temporary storage...
                   </p>
                 </div>
               ) : (
                 <>
                   <p className="text-sm text-blue-700 mb-2">
-                    <span className="font-semibold">Click to upload</span> or drag and drop
+                    <span className="font-semibold">Click to select</span> or drag and drop
                   </p>
                   <p className="text-xs text-blue-500">
                     Max: {maxSizeMB}MB • Types: {allowedTypes}
+                  </p>
+                  <p className="text-xs text-blue-400 mt-1">
+                    ⚠️ File will be uploaded when you save changes
                   </p>
                 </>
               )}
@@ -260,30 +191,24 @@ export default function FileUploader({
               className="hidden"
               accept={allowedTypes}
               onChange={handleFileSelect}
-              disabled={disabled || isUploading}
+              disabled={disabled || isProcessing}
             />
           </label>
         </div>
       </div>
 
-      {/* Progress Bar */}
-      {isUploading && (
+      {/* Processing Indicator */}
+      {isProcessing && (
         <div className="mb-4">
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
-            <div
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <div className="flex justify-between items-center mt-2">
+          <div className="flex justify-between items-center">
             <span className="text-xs text-blue-700">
-              Uploading... {progress.toFixed(0)}%
+              Processing file for temporary storage...
             </span>
             <button
               onClick={handleCancel}
               className="text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50"
             >
-              Cancel Upload
+              Cancel
             </button>
           </div>
         </div>
@@ -304,10 +229,10 @@ export default function FileUploader({
         <button
           type="button"
           onClick={handleCancel}
-          disabled={isUploading}
+          disabled={isProcessing}
           className="px-4 py-2 text-blue-600 hover:text-blue-800 transition disabled:opacity-50"
         >
-          {isUploading ? "Cancel Upload" : "Cancel"}
+          {isProcessing ? "Cancel Processing" : "Cancel"}
         </button>
       </div>
     </div>

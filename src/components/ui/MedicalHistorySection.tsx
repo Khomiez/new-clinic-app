@@ -1,8 +1,9 @@
-// src/components/ui/MedicalHistorySection.tsx - FIXED: Pass pending deletions to child components
+// src/components/ui/MedicalHistorySection.tsx - COMPLETE UPDATED: Support for temporary files
 "use client";
 
 import React, { useState } from "react";
 import { IHistoryRecord } from "@/interfaces";
+import { TemporaryFile } from "@/utils/temporaryFileStorage";
 import HistoryRecord from "./HistoryRecord";
 import DocumentUpload from "./DocumentUpload";
 import { ThaiDatePicker } from "@/components";
@@ -17,13 +18,16 @@ interface MedicalHistorySectionProps {
   onUpdateRecordDate: (index: number, newDate: Date) => void;
   onAddDocument: (recordIndex: number, url: string) => void;
   onRemoveDocument: (recordIndex: number, documentIndex: number) => void;
-  // NEW: Optional prop to receive pending deletions from parent
   pendingFileDeletions?: Array<{
     recordIndex: number;
     documentIndex: number;
     url: string;
     filename: string;
   }>;
+  // NEW: Temporary file support
+  temporaryFiles?: TemporaryFile[];
+  onAddTemporaryFile?: (recordIndex: number, tempFile: TemporaryFile) => void;
+  onRemoveTemporaryFile?: (tempFileId: string) => void;
 }
 
 export default function MedicalHistorySection({
@@ -36,7 +40,10 @@ export default function MedicalHistorySection({
   onUpdateRecordDate,
   onAddDocument,
   onRemoveDocument,
-  pendingFileDeletions = [], // NEW: Receive pending deletions
+  pendingFileDeletions = [],
+  temporaryFiles = [], // NEW: Temporary files
+  onAddTemporaryFile, // NEW: Handler for adding temporary files
+  onRemoveTemporaryFile, // NEW: Handler for removing temporary files
 }: MedicalHistorySectionProps) {
   const [isAddingRecord, setIsAddingRecord] = useState(false);
   const [isAddingDocument, setIsAddingDocument] = useState(false);
@@ -45,6 +52,8 @@ export default function MedicalHistorySection({
     document_urls: [],
     notes: "",
   });
+  // NEW: Local state for temporary files being added to the new record
+  const [newRecordTemporaryFiles, setNewRecordTemporaryFiles] = useState<TemporaryFile[]>([]);
 
   const handleRecordChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCurrentRecord(prev => ({
@@ -60,12 +69,28 @@ export default function MedicalHistorySection({
     }));
   };
 
+  // LEGACY: Handle regular upload completion (for new records)
   const handleAddDocument = (url: string) => {
     setCurrentRecord(prev => ({
       ...prev,
       document_urls: [...(prev.document_urls || []), url],
     }));
     setIsAddingDocument(false);
+  };
+
+  // NEW: Handle temporary file addition for new record
+  const handleAddTemporaryFileToNewRecord = (tempFile: TemporaryFile) => {
+    console.log('MedicalHistorySection: Adding temporary file to new record:', tempFile);
+    setNewRecordTemporaryFiles(prev => [...prev, tempFile]);
+    setIsAddingDocument(false);
+  };
+
+  // NEW: Handle temporary file removal for new record
+  const handleRemoveTemporaryFileFromNewRecord = (tempFileId: string) => {
+    console.log('MedicalHistorySection: Removing temporary file from new record:', tempFileId);
+    setNewRecordTemporaryFiles(prev => 
+      prev.filter(tempFile => tempFile.id !== tempFileId)
+    );
   };
 
   const handleRemoveDocumentFromCurrent = (docIndex: number) => {
@@ -81,7 +106,33 @@ export default function MedicalHistorySection({
       return;
     }
 
-    onAddRecord(currentRecord);
+    // NEW: When saving a new record, we need to handle temporary files
+    // For now, we'll add them to the record's document_urls as temporary placeholders
+    // They will be properly handled when the main save happens
+    const recordWithTempFiles = {
+      ...currentRecord,
+      // For now, we'll store temporary file IDs as special URLs that we can identify later
+      document_urls: [
+        ...(currentRecord.document_urls || []),
+        ...newRecordTemporaryFiles.map(tf => `temp://${tf.id}`)
+      ]
+    };
+
+    console.log('Saving new record with temporary files:', {
+      record: recordWithTempFiles,
+      temporaryFiles: newRecordTemporaryFiles
+    });
+
+    onAddRecord(recordWithTempFiles);
+    
+    // NEW: Add temporary files to the main temporary files list with updated record index
+    if (onAddTemporaryFile && newRecordTemporaryFiles.length > 0) {
+      const newRecordIndex = historyRecords.length; // This will be the index of the new record
+      newRecordTemporaryFiles.forEach(tempFile => {
+        const updatedTempFile = { ...tempFile, recordIndex: newRecordIndex };
+        onAddTemporaryFile(newRecordIndex, updatedTempFile);
+      });
+    }
     
     // Reset form
     setCurrentRecord({
@@ -89,17 +140,30 @@ export default function MedicalHistorySection({
       document_urls: [],
       notes: "",
     });
+    setNewRecordTemporaryFiles([]); // NEW: Clear temporary files
     setIsAddingRecord(false);
     setIsAddingDocument(false);
   };
 
   const handleCancelRecord = () => {
+    // NEW: Clean up temporary files when canceling
+    if (newRecordTemporaryFiles.length > 0) {
+      console.log('Canceling record creation, cleaning up temporary files:', newRecordTemporaryFiles);
+      // Revoke object URLs to prevent memory leaks
+      newRecordTemporaryFiles.forEach(tempFile => {
+        if (tempFile.previewUrl) {
+          URL.revokeObjectURL(tempFile.previewUrl);
+        }
+      });
+    }
+
     // Reset form
     setCurrentRecord({
       timestamp: new Date(),
       document_urls: [],
       notes: "",
     });
+    setNewRecordTemporaryFiles([]); // NEW: Clear temporary files
     setIsAddingRecord(false);
     setIsAddingDocument(false);
   };
@@ -110,18 +174,25 @@ export default function MedicalHistorySection({
     }
   };
 
-  // Handle note updates for existing records
   const handleUpdateRecordNotes = (index: number, notes: string) => {
     const updatedRecord = { ...historyRecords[index], notes };
     onUpdateRecord(index, updatedRecord);
   };
 
-  // NEW: Helper function to get pending deletions for a specific record
   const getPendingDeletionsForRecord = (recordIndex: number): string[] => {
     return pendingFileDeletions
       .filter(deletion => deletion.recordIndex === recordIndex)
       .map(deletion => deletion.url);
   };
+
+  // NEW: Get temporary files for a specific record
+  const getTemporaryFilesForRecord = (recordIndex: number): TemporaryFile[] => {
+    return temporaryFiles.filter(tempFile => tempFile.recordIndex === recordIndex);
+  };
+
+  // NEW: Calculate totals for display
+  const totalPendingDeletions = pendingFileDeletions.length;
+  const totalPendingUploads = temporaryFiles.length + newRecordTemporaryFiles.length;
 
   return (
     <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
@@ -130,12 +201,19 @@ export default function MedicalHistorySection({
           <h2 className="text-xl text-blue-700 font-medium flex items-center gap-2">
             <span>📁</span> ประวัติการรักษาพยาบาล
           </h2>
-          {/* NEW: Show overall pending deletion summary */}
-          {pendingFileDeletions.length > 0 && (
-            <p className="text-sm text-orange-600 mt-1">
-              {pendingFileDeletions.length} file(s) marked for deletion
-            </p>
-          )}
+          {/* NEW: Enhanced status display */}
+          <div className="flex items-center space-x-3 mt-1">
+            {totalPendingDeletions > 0 && (
+              <p className="text-sm text-red-600">
+                {totalPendingDeletions} file(s) marked for deletion
+              </p>
+            )}
+            {totalPendingUploads > 0 && (
+              <p className="text-sm text-orange-600">
+                {totalPendingUploads} file(s) pending upload
+              </p>
+            )}
+          </div>
         </div>
         <button
           onClick={() => setIsAddingRecord(true)}
@@ -182,20 +260,43 @@ export default function MedicalHistorySection({
               />
             </div>
 
-            {/* Documents */}
-            {currentRecord.document_urls && currentRecord.document_urls.length > 0 && (
+            {/* Documents - Show both regular and temporary files */}
+            {((currentRecord.document_urls && currentRecord.document_urls.length > 0) || 
+              newRecordTemporaryFiles.length > 0) && (
               <div>
                 <label className="block text-sm font-medium text-blue-700 mb-2">
                   เอกสารที่แนบ
                 </label>
                 <div className="space-y-2 mb-3">
-                  {currentRecord.document_urls.map((url, idx) => (
+                  {/* Regular uploaded documents */}
+                  {currentRecord.document_urls?.map((url, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-blue-100">
                       <span className="text-sm truncate max-w-xs">
                         {url.split("/").pop()}
                       </span>
                       <button
                         onClick={() => handleRemoveDocumentFromCurrent(idx)}
+                        className="text-xs bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {/* NEW: Temporary files */}
+                  {newRecordTemporaryFiles.map((tempFile) => (
+                    <div key={tempFile.id} className="flex justify-between items-center bg-orange-50 p-2 rounded border border-orange-200">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-orange-500">📤</span>
+                        <span className="text-sm truncate max-w-xs">
+                          {tempFile.filename}
+                        </span>
+                        <span className="text-xs text-orange-600 bg-orange-200 px-2 py-0.5 rounded">
+                          TEMP
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveTemporaryFileFromNewRecord(tempFile.id)}
                         className="text-xs bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded"
                       >
                         Remove
@@ -216,7 +317,8 @@ export default function MedicalHistorySection({
                 <DocumentUpload
                   clinicId={clinicId || ""}
                   patientId={patientId}
-                  onAddDocument={handleAddDocument}
+                  recordIndex={-1} // Special index for new records
+                  onAddDocument={handleAddTemporaryFileToNewRecord} // NEW: Handle temporary files
                   onCancel={() => setIsAddingDocument(false)}
                 />
               ) : (
@@ -269,7 +371,10 @@ export default function MedicalHistorySection({
               onAddDocument={onAddDocument}
               onRemoveDocument={onRemoveDocument}
               onUpdateNotes={handleUpdateRecordNotes}
-              pendingDeletions={getPendingDeletionsForRecord(index)} // NEW: Pass record-specific pending deletions
+              pendingDeletions={getPendingDeletionsForRecord(index)}
+              temporaryFiles={getTemporaryFilesForRecord(index)} // NEW: Pass record-specific temporary files
+              onAddTemporaryFile={onAddTemporaryFile} // NEW: Pass handler
+              onRemoveTemporaryFile={onRemoveTemporaryFile} // NEW: Pass handler
             />
           ))
         ) : !isAddingRecord ? (
