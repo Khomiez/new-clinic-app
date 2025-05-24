@@ -65,15 +65,20 @@ export default function EditPatient({ params }: PageProps) {
     lastVisit: undefined,
     history: [],
   });
-  const [originalPatient, setOriginalPatient] = useState<Partial<IPatient> | null>(null);
+  const [originalPatient, setOriginalPatient] =
+    useState<Partial<IPatient> | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // NEW: State for tracking pending file deletions
-  const [pendingFileDeletions, setPendingFileDeletions] = useState<PendingFileDeletion[]>([]);
+  const [pendingFileDeletions, setPendingFileDeletions] = useState<
+    PendingFileDeletion[]
+  >([]);
 
   // State for clinics
-  const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(undefined);
+  const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(
+    undefined
+  );
 
   // State for showing discard confirmation
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
@@ -153,7 +158,7 @@ export default function EditPatient({ params }: PageProps) {
       setPatient(patientData);
       setOriginalPatient(JSON.parse(JSON.stringify(patientData))); // Deep copy
       setHasUnsavedChanges(false);
-      
+
       // NEW: Clear pending deletions when loading fresh data
       setPendingFileDeletions([]);
     }
@@ -162,7 +167,8 @@ export default function EditPatient({ params }: PageProps) {
   // NEW: Check for unsaved changes including pending deletions
   useEffect(() => {
     if (originalPatient && patient) {
-      const hasDataChanges = JSON.stringify(patient) !== JSON.stringify(originalPatient);
+      const hasDataChanges =
+        JSON.stringify(patient) !== JSON.stringify(originalPatient);
       const hasPendingDeletions = pendingFileDeletions.length > 0;
       setHasUnsavedChanges(hasDataChanges || hasPendingDeletions);
     }
@@ -173,7 +179,8 @@ export default function EditPatient({ params }: PageProps) {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
         e.preventDefault();
-        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        e.returnValue =
+          "You have unsaved changes. Are you sure you want to leave?";
         return e.returnValue;
       }
     };
@@ -205,26 +212,31 @@ export default function EditPatient({ params }: PageProps) {
     if (!selectedClinic || urls.length === 0) return;
 
     try {
-      console.log('Deleting files from Cloudinary:', urls);
-      
+      console.log("Deleting files from Cloudinary:", urls);
+
       // Delete files one by one (you could also implement batch delete)
       for (const url of urls) {
         const deleteResponse = await fetch(
-          `/api/clinic/${toIdString(selectedClinic._id)}/files?url=${encodeURIComponent(url)}`,
-          { method: 'DELETE' }
+          `/api/clinic/${toIdString(
+            selectedClinic._id
+          )}/files?url=${encodeURIComponent(url)}`,
+          { method: "DELETE" }
         );
 
         const result = await deleteResponse.json();
-        
+
         if (!result.success) {
-          console.warn(`Failed to delete file from Cloudinary: ${url}`, result.error);
+          console.warn(
+            `Failed to delete file from Cloudinary: ${url}`,
+            result.error
+          );
           // Continue with other deletions even if one fails
         } else {
           console.log(`Successfully deleted file: ${url}`);
         }
       }
     } catch (error) {
-      console.error('Error deleting files from Cloudinary:', error);
+      console.error("Error deleting files from Cloudinary:", error);
       // Don't throw - we want to continue with the save operation
     }
   };
@@ -247,9 +259,13 @@ export default function EditPatient({ params }: PageProps) {
     try {
       // NEW: First, delete files from Cloudinary that are marked for deletion
       if (pendingFileDeletions.length > 0) {
-        const urlsToDelete = pendingFileDeletions.map(deletion => deletion.url);
+        const urlsToDelete = pendingFileDeletions.map(
+          (deletion) => deletion.url
+        );
         await deleteFilesFromCloudinary(urlsToDelete);
-        console.log(`Deleted ${pendingFileDeletions.length} files from Cloudinary`);
+        console.log(
+          `Deleted ${pendingFileDeletions.length} files from Cloudinary`
+        );
       }
 
       // Save patient data to database
@@ -263,7 +279,7 @@ export default function EditPatient({ params }: PageProps) {
 
       // Update original state to current state
       setOriginalPatient(JSON.parse(JSON.stringify(patient)));
-      
+
       // NEW: Clear pending deletions after successful save
       setPendingFileDeletions([]);
       setHasUnsavedChanges(false);
@@ -293,7 +309,7 @@ export default function EditPatient({ params }: PageProps) {
     if (originalPatient) {
       setPatient(JSON.parse(JSON.stringify(originalPatient)));
     }
-    
+
     // NEW: Clear pending deletions (files will remain in Cloudinary)
     setPendingFileDeletions([]);
     setHasUnsavedChanges(false);
@@ -356,8 +372,8 @@ export default function EditPatient({ params }: PageProps) {
   const handleRemoveRecord = async (index: number) => {
     if (confirm("Are you sure you want to delete this medical record?")) {
       // NEW: When removing a record, also remove any pending deletions for that record
-      setPendingFileDeletions(prev => 
-        prev.filter(deletion => deletion.recordIndex !== index)
+      setPendingFileDeletions((prev) =>
+        prev.filter((deletion) => deletion.recordIndex !== index)
       );
 
       setPatient((prev) => {
@@ -420,33 +436,36 @@ export default function EditPatient({ params }: PageProps) {
   };
 
   // NEW: Updated document removal handler - only marks for deletion
-  const handleRemoveDocument = async (recordIndex: number, documentIndex: number) => {
+  const handleRemoveDocument = async (
+    recordIndex: number,
+    documentIndex: number
+  ) => {
     if (!patient.history || !patient.history[recordIndex]) return;
 
     const record = patient.history[recordIndex];
     const documentUrl = record.document_urls?.[documentIndex];
-    
+
     if (!documentUrl) return;
 
     // Extract filename for display purposes
-    const filename = documentUrl.split('/').pop() || 'Document';
+    const filename = documentUrl.split("/").pop() || "Document";
 
-    console.log('Marking document for deletion:', {
+    console.log("Marking document for deletion:", {
       recordIndex,
       documentIndex,
       url: documentUrl,
-      filename
+      filename,
     });
 
     // NEW: Add to pending deletions instead of deleting immediately
-    setPendingFileDeletions(prev => [
+    setPendingFileDeletions((prev) => [
       ...prev,
       {
         recordIndex,
         documentIndex,
         url: documentUrl,
-        filename
-      }
+        filename,
+      },
     ]);
 
     // Remove from patient data (UI will show it as removed)
@@ -460,7 +479,9 @@ export default function EditPatient({ params }: PageProps) {
 
       updatedHistory[recordIndex] = {
         ...record,
-        document_urls: record.document_urls.filter((_, i) => i !== documentIndex),
+        document_urls: record.document_urls.filter(
+          (_, i) => i !== documentIndex
+        ),
       };
 
       return {
@@ -471,9 +492,14 @@ export default function EditPatient({ params }: PageProps) {
   };
 
   // NEW: Helper function to check if a file is pending deletion
-  const isFilePendingDeletion = (recordIndex: number, documentIndex: number): boolean => {
+  const isFilePendingDeletion = (
+    recordIndex: number,
+    documentIndex: number
+  ): boolean => {
     return pendingFileDeletions.some(
-      deletion => deletion.recordIndex === recordIndex && deletion.documentIndex === documentIndex
+      (deletion) =>
+        deletion.recordIndex === recordIndex &&
+        deletion.documentIndex === documentIndex
     );
   };
 
@@ -544,7 +570,9 @@ export default function EditPatient({ params }: PageProps) {
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>• Patient information changes</li>
                 {pendingFileDeletions.length > 0 && (
-                  <li>• {pendingFileDeletions.length} file(s) marked for deletion</li>
+                  <li>
+                    • {pendingFileDeletions.length} file(s) marked for deletion
+                  </li>
                 )}
               </ul>
               <p className="text-gray-700 mt-3">
@@ -601,7 +629,8 @@ export default function EditPatient({ params }: PageProps) {
               {pendingFileDeletions.length > 0 && (
                 <div className="mt-2">
                   <p className="text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded">
-                    {pendingFileDeletions.length} file(s) marked for deletion - will be removed when you save
+                    {pendingFileDeletions.length} file(s) marked for deletion -
+                    will be removed when you save
                   </p>
                 </div>
               )}
@@ -666,7 +695,8 @@ export default function EditPatient({ params }: PageProps) {
                         className="block text-sm font-medium text-slate-600 mb-1"
                         htmlFor="HN_code"
                       >
-                        Hospital Number (HN) <span className="text-red-500">*</span>
+                        Hospital Number (HN){" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -706,7 +736,9 @@ export default function EditPatient({ params }: PageProps) {
                       วันที่เข้ารับบริการครั้งล่าสุด
                     </label>
                     <ThaiDatePicker
-                      selectedDate={patient.lastVisit ? new Date(patient.lastVisit) : null}
+                      selectedDate={
+                        patient.lastVisit ? new Date(patient.lastVisit) : null
+                      }
                       onChange={(date) => {
                         setPatient((prev) => ({
                           ...prev,
@@ -719,7 +751,8 @@ export default function EditPatient({ params }: PageProps) {
 
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
                     <p className="text-sm text-blue-600">
-                      <span className="font-bold">Note:</span> ใช้ปุ่ม "save changes"
+                      <span className="font-bold">Note:</span> ใช้ปุ่ม "save
+                      changes"
                       ด้านบนเพื่อบันทึกข้อมูลผู้ป่วยและประวัติการรักษาทั้งหมด
                     </p>
                   </div>
@@ -731,7 +764,9 @@ export default function EditPatient({ params }: PageProps) {
             <div className="lg:col-span-2">
               <MedicalHistorySection
                 patientId={patientId!}
-                clinicId={selectedClinic ? toIdString(selectedClinic._id) : undefined}
+                clinicId={
+                  selectedClinic ? toIdString(selectedClinic._id) : undefined
+                }
                 historyRecords={patient.history || []}
                 onAddRecord={handleAddRecord}
                 onUpdateRecord={handleUpdateRecord}
@@ -739,6 +774,7 @@ export default function EditPatient({ params }: PageProps) {
                 onUpdateRecordDate={handleUpdateRecordDate}
                 onAddDocument={handleAddDocument}
                 onRemoveDocument={handleRemoveDocument}
+                pendingFileDeletions={pendingFileDeletions}
               />
             </div>
           </div>

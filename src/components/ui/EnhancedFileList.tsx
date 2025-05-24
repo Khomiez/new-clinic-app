@@ -1,4 +1,4 @@
-// src/components/ui/EnhancedFileList.tsx - FIXED: Only marks for local deletion, no immediate Cloudinary deletion
+// src/components/ui/EnhancedFileList.tsx - FIXED: Proper conditional styling for pending deletions
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -219,6 +219,13 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
     onDeleteFile(url, index);
   };
 
+  // Debug pending deletions
+  console.log('EnhancedFileList Debug:', {
+    fileUrls,
+    pendingDeletions,
+    resourcesCount: cloudinaryResources.length
+  });
+
   if (loading) {
     return (
       <div className="bg-blue-50 p-3 rounded-lg text-center">
@@ -269,25 +276,26 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
           // NEW: Check if this file is pending deletion
           const isPendingDeletion = pendingDeletions.includes(resource.secure_url);
 
-          console.log(`File ${index}:`, {
+          // Debug each file
+          console.log(`File ${index} Debug:`, {
             url: resource.secure_url,
-            context: resource.context,
             displayFilename,
-            canPreview,
-            isPendingDeletion
+            isPendingDeletion,
+            pendingDeletionsArray: pendingDeletions
           });
 
           return (
             <div key={index} className="relative">
+              {/* FIXED: Corrected conditional styling with proper class separation */}
               <div
                 className={`
-                flex items-center justify-between bg-white rounded-lg border transition-colors
-                ${compact ? "p-2" : "p-3"}
-                ${isPendingDeletion 
-                  ? "border-red-200 bg-red-50 opacity-75" 
-                  : "border-blue-100 text-red-700 hover:border-blue-300"
-                }
-              `}
+                  flex items-center justify-between rounded-lg border transition-colors
+                  ${compact ? "p-2" : "p-3"}
+                  ${isPendingDeletion 
+                    ? "border-red-300 bg-red-100 opacity-70" 
+                    : "border-blue-100 bg-white hover:border-blue-300"
+                  }
+                `}
               >
                 {/* File Info */}
                 <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -299,14 +307,16 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                     <span
                       className={`font-medium truncate block ${
                         compact ? "text-sm" : ""
-                      } ${isPendingDeletion ? "text-red-600 line-through" : "text-gray-700"}`}
+                      } ${isPendingDeletion ? "text-red-700 line-through" : "text-gray-700"}`}
                       title={displayFilename}
                     >
                       {displayFilename}
                     </span>
                     
                     {/* File metadata */}
-                    <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+                    <div className={`flex items-center space-x-2 text-xs mt-1 ${
+                      isPendingDeletion ? "text-red-500" : "text-gray-500"
+                    }`}>
                       <span>{resource.format?.toUpperCase() || 'FILE'}</span>
                       {resource.bytes && (
                         <>
@@ -320,7 +330,9 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                       {isPendingDeletion && (
                         <>
                           <span>•</span>
-                          <span className="text-red-500 font-medium">Marked for deletion</span>
+                          <span className="text-red-600 font-semibold bg-red-200 px-2 py-0.5 rounded-full">
+                            PENDING DELETE
+                          </span>
                         </>
                       )}
                     </div>
@@ -361,8 +373,10 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                     {onDeleteFile && (
                       <>
                         {isPendingDeletion ? (
-                          <span className={`text-red-500 px-2 py-1 ${compact ? "text-xs" : "text-sm"}`}>
-                            Will be deleted
+                          <span className={`text-red-600 font-semibold px-3 py-1 bg-red-200 rounded ${
+                            compact ? "text-xs" : "text-sm"
+                          }`}>
+                            Will Delete
                           </span>
                         ) : (
                           <button
@@ -380,6 +394,15 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* ADDITIONAL: Overlay indicator for pending deletion */}
+              {isPendingDeletion && (
+                <div className="absolute top-0 right-0 -mt-2 -mr-2">
+                  <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-pulse">
+                    DELETE PENDING
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
