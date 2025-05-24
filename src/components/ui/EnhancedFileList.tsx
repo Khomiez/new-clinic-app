@@ -285,7 +285,7 @@ const EnhancedFileList: React.FC<EnhancedFileListProps> = ({
                 ${compact ? "p-2" : "p-3"}
                 ${isPendingDeletion 
                   ? "border-red-200 bg-red-50 opacity-75" 
-                  : "border-blue-100 hover:border-blue-300"
+                  : "border-blue-100 text-red-700 hover:border-blue-300"
                 }
               `}
               >
