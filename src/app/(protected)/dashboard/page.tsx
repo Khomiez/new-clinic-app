@@ -498,41 +498,41 @@ export default function AdminDashboard() {
               cardDescription2=""
             />
           </div> */}
-          {/* Quick Stats Section */}
           {selectedClinic && pagination && pagination.totalItems > 0 && (
-            <div className="mt-6 bg-white p-4 sm:p-6 rounded-xl shadow-md border border-blue-100 mb-4">
-              <h3 className="text-lg font-bold text-blue-800 mb-4">
-                สถิติคลินิก
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="text-center p-3 bg-blue-50 rounded-lg">
-                  <div className="text-2xl text-blue-600 font-bold">
-                    {pagination.totalItems}
-                  </div>
-                  <div className="text-sm text-blue-500">ผู้ป่วยทั้งหมด</div>
-                </div>
-                <div className="text-center p-3 bg-green-50 rounded-lg">
-                  <div className="text-2xl text-green-600 font-bold">
-                    {Math.ceil(pagination.totalItems / pagination.totalPages)}
-                  </div>
-                  <div className="text-sm text-green-500">เฉลี่ยต่อหน้า</div>
-                </div>
-                <div className="text-center p-3 bg-purple-50 rounded-lg">
-                  <div className="text-2xl text-purple-600 font-bold">
-                    {pagination.totalPages}
-                  </div>
-                  <div className="text-sm text-purple-500">หน้าทั้งหมด</div>
-                </div>
-                <div className="text-center p-3 bg-orange-50 rounded-lg">
-                  <div className="text-2xl text-orange-600 font-bold">
-                    {selectedClinic.name.length > 10
-                      ? `${selectedClinic.name.substring(0, 10)}...`
-                      : selectedClinic.name}
-                  </div>
-                  <div className="text-sm text-orange-500">คลินิกปัจจุบัน</div>
-                </div>
-              </div>
-            </div>
+            // <div className="mt-6 bg-white p-4 sm:p-6 rounded-xl shadow-md border border-blue-100 mb-4">
+            //   <h3 className="text-lg font-bold text-blue-800 mb-4">
+            //     สถิติคลินิก
+            //   </h3>
+            //   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            //     <div className="text-center p-3 bg-blue-50 rounded-lg">
+            //       <div className="text-2xl text-blue-600 font-bold">
+            //         {pagination.totalItems}
+            //       </div>
+            //       <div className="text-sm text-blue-500">ผู้ป่วยทั้งหมด</div>
+            //     </div>
+            //     <div className="text-center p-3 bg-green-50 rounded-lg">
+            //       <div className="text-2xl text-green-600 font-bold">
+            //         {Math.ceil(pagination.totalItems / pagination.totalPages)}
+            //       </div>
+            //       <div className="text-sm text-green-500">เฉลี่ยต่อหน้า</div>
+            //     </div>
+            //     <div className="text-center p-3 bg-purple-50 rounded-lg">
+            //       <div className="text-2xl text-purple-600 font-bold">
+            //         {pagination.totalPages}
+            //       </div>
+            //       <div className="text-sm text-purple-500">หน้าทั้งหมด</div>
+            //     </div>
+            //     <div className="text-center p-3 bg-orange-50 rounded-lg">
+            //       <div className="text-2xl text-orange-600 font-bold">
+            //         {selectedClinic.name.length > 10
+            //           ? `${selectedClinic.name.substring(0, 10)}...`
+            //           : selectedClinic.name}
+            //       </div>
+            //       <div className="text-sm text-orange-500">คลินิกปัจจุบัน</div>
+            //     </div>
+            //   </div>
+            // </div>
+            <></>
           )}
 
           {/* Patient List Section */}
@@ -660,22 +660,22 @@ export default function AdminDashboard() {
               <table className="min-w-full divide-y divide-blue-100">
                 <thead>
                   <tr>
-                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-base font-medium text-blue-400 uppercase tracking-wider">
                       ชื่อ-สกุล
                     </th>
-                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-base font-medium text-blue-400 uppercase tracking-wider">
                       HN CODE
                     </th>
-                    <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-base font-medium text-blue-400 uppercase tracking-wider">
                       รหัสประชาชน
                     </th>
-                    <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-base font-medium text-blue-400 uppercase tracking-wider">
                       เข้ารับบริการล่าสุด
                     </th>
-                    <th className="hidden xl:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="hidden xl:table-cell px-3 sm:px-6 py-3 text-left text-base font-medium text-blue-400 uppercase tracking-wider">
                       แก้ไขล่าสุด
                     </th>
-                    <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-blue-400 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-right text-base font-medium text-blue-400 uppercase tracking-wider">
                       จัดการ
                     </th>
                   </tr>
@@ -687,31 +687,31 @@ export default function AdminDashboard() {
                       className="hover:bg-blue-50 transition-colors"
                     >
                       <td className="px-3 sm:px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                        <div className="text-lg font-medium text-gray-900 truncate max-w-xs">
                           {patient.name}
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 font-mono">
-                          {patient.HN_code}
+                        <div className="text-lg text-gray-900 font-mono">
+                          {patient.HN_code.replace(/([A-Z]+)(\d+)/, "$1 $2")}
                         </div>
                       </td>
                       <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-lg text-gray-900">
                           {patient.ID_code || "N/A"}
                         </div>
                       </td>
                       <td className="hidden lg:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">
+                        <div className="text-lg text-gray-500">
                           {formatDate(patient.lastVisit || patient.createdAt)}
                         </div>
                       </td>
                       <td className="hidden xl:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">
+                        <div className="text-lg text-gray-500">
                           {formatDate(patient.updatedAt)}
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-lg font-medium">
                         <div className="flex justify-end space-x-2">
                           <button
                             onClick={() => handleEditPatient(patient)}
