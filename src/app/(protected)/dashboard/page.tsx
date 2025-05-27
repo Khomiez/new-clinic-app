@@ -1,10 +1,9 @@
-// src/app/(protected)/dashboard/page.tsx - Updated with manual search button
+// src/app/(protected)/dashboard/page.tsx - Updated with enhanced sidebar statistics
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar, Navbar, LoadingScreen, ErrorScreen } from "@/components";
-import Card from "@/components/ui/Card";
 import Pagination from "@/components/ui/Pagination";
 import { PatientDeleteDialog } from "@/components/PatientDeleteDialog";
 import { IClinic, IPatient } from "@/interfaces";
@@ -24,6 +23,7 @@ import { setSelectedClinic } from "@/redux/features/settings/settingsSlice";
 import { formatDateThai } from "@/components";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
+import { useClinicStats } from "@/hooks/useClinicStats"; // Import the new hook
 import React from "react";
 
 // Format date for display
@@ -114,6 +114,12 @@ export default function AdminDashboard() {
     patient: IPatient | null;
   }>({ isOpen: false, patient: null });
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // NEW: Use clinic statistics hook
+  const clinicStats = useClinicStats({
+    clinicId: selectedClinic ? toIdString(selectedClinic._id) : undefined,
+    refreshInterval: 5 * 60 * 1000, // Refresh every 5 minutes
+  });
 
   // Search input ref for focus management
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -450,12 +456,13 @@ export default function AdminDashboard() {
       />
 
       <div className="flex">
-        {/* Sidebar */}
+        {/* Enhanced Sidebar with Statistics */}
         <Sidebar
           clinics={Array.isArray(clinicsState.items) ? clinicsState.items : []}
           selectedClinic={selectedClinic}
           handleClinicChange={handleClinicChange}
           activePage="dashboard"
+          clinicStats={clinicStats} // NEW: Pass clinic statistics
         />
 
         {/* Main Content */}
@@ -473,67 +480,6 @@ export default function AdminDashboard() {
               </p>
             )}
           </div>
-
-          {/* Dashboard Summary Cards
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
-            <Card
-              cardTopic="ผู้ป่วยทั้งหมด"
-              cardEmoji="👥"
-              cardValue={pagination?.totalItems || 0}
-              cardDescription1=""
-              cardDescription2="รายการทั้งหมดในระบบ"
-            />
-            <Card
-              cardTopic="หน้าปัจจุบัน"
-              cardEmoji="📄"
-              cardValue={pagination?.currentPage || 1}
-              cardDescription1={`จาก ${pagination?.totalPages || 1} หน้า`}
-              cardDescription2=""
-            />
-            <Card
-              cardTopic="รายการในหน้านี้"
-              cardEmoji="📝"
-              cardValue={currentItems.length}
-              cardDescription1={`จาก ${pagination?.itemsPerPage || 10} รายการต่อหน้า`}
-              cardDescription2=""
-            />
-          </div> */}
-          {selectedClinic && pagination && pagination.totalItems > 0 && (
-            // <div className="mt-6 bg-white p-4 sm:p-6 rounded-xl shadow-md border border-blue-100 mb-4">
-            //   <h3 className="text-lg font-bold text-blue-800 mb-4">
-            //     สถิติคลินิก
-            //   </h3>
-            //   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            //     <div className="text-center p-3 bg-blue-50 rounded-lg">
-            //       <div className="text-2xl text-blue-600 font-bold">
-            //         {pagination.totalItems}
-            //       </div>
-            //       <div className="text-sm text-blue-500">ผู้ป่วยทั้งหมด</div>
-            //     </div>
-            //     <div className="text-center p-3 bg-green-50 rounded-lg">
-            //       <div className="text-2xl text-green-600 font-bold">
-            //         {Math.ceil(pagination.totalItems / pagination.totalPages)}
-            //       </div>
-            //       <div className="text-sm text-green-500">เฉลี่ยต่อหน้า</div>
-            //     </div>
-            //     <div className="text-center p-3 bg-purple-50 rounded-lg">
-            //       <div className="text-2xl text-purple-600 font-bold">
-            //         {pagination.totalPages}
-            //       </div>
-            //       <div className="text-sm text-purple-500">หน้าทั้งหมด</div>
-            //     </div>
-            //     <div className="text-center p-3 bg-orange-50 rounded-lg">
-            //       <div className="text-2xl text-orange-600 font-bold">
-            //         {selectedClinic.name.length > 10
-            //           ? `${selectedClinic.name.substring(0, 10)}...`
-            //           : selectedClinic.name}
-            //       </div>
-            //       <div className="text-sm text-orange-500">คลินิกปัจจุบัน</div>
-            //     </div>
-            //   </div>
-            // </div>
-            <></>
-          )}
 
           {/* Patient List Section */}
           <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-blue-100">

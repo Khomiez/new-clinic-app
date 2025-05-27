@@ -1,5 +1,5 @@
-// src/components/layout/Sidebar.tsx
-import React from "react";
+// src/components/layout/Sidebar.tsx - Enhanced with clinic statistics
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { IClinic } from "@/interfaces";
 import { toIdString } from "@/utils/mongoHelpers";
@@ -14,6 +14,14 @@ interface SidebarProps {
     | "examinations"
     | "medications"
     | "settings";
+  // New props for statistics
+  clinicStats?: {
+    totalPatients: number;
+    todayNewPatients: number;
+    totalPages: number;
+    isLoading: boolean;
+    lastUpdated?: Date;
+  };
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -21,6 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   selectedClinic,
   handleClinicChange,
   activePage = "dashboard",
+  clinicStats,
 }) => {
   // Navigation links configuration
   const navLinks = [
@@ -30,29 +39,45 @@ const Sidebar: React.FC<SidebarProps> = ({
     // { id: "medications", name: "Medications", icon: "💊", href: "#" },
   ];
 
+  // Format today's date in Thai
+  const formatThaiDate = (date: Date): string => {
+    return date.toLocaleDateString("th-TH", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      calendar: "buddhist",
+    });
+  };
+
+  const thaiDay = (date: Date): string => {
+    const days = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+    return days[date.getDay()];
+  };
+
+  // Get greeting based on time of day
+  const getTimeBasedGreeting = (): { greeting: string; icon: string } => {
+    const hour = new Date().getHours();
+    if (hour < 12) return { greeting: "สวัสดีตอนเช้า", icon: "🌅" };
+    if (hour < 17) return { greeting: "สวัสดีตอนบ่าย", icon: "☀️" };
+    return { greeting: "สวัสดีตอนเย็น", icon: "🌆" };
+  };
+
+  const { greeting, icon } = getTimeBasedGreeting();
+
   return (
     <div className="w-64 bg-white shadow-md h-[calc(100vh-4.1rem)] flex flex-col">
-      {/* Logo Section */}
-      {/* <div className="p-6 border-b border-blue-100">
-        <div className="flex items-center">
-          <div className="text-2xl mr-2">🏥</div>
-          <h1 className="text-xl font-bold text-blue-900">Boxmoji Clinical</h1>
-        </div>
-        <p className="text-blue-500 text-sm mt-1">Staff Portal</p>
-      </div> */}
-
       {/* Navigation */}
       <nav className="p-4 flex-grow">
         <p className="text-blue-400 uppercase text-md font-semibold mb-2">
           เมนูหลัก
         </p>
 
-        <ul>
+        <ul className="mb-6">
           {navLinks.map((link) => (
             <li key={link.id} className="mb-1">
               <Link
                 href={link.href}
-                className={`flex items-center px-4 py-3 rounded-lg ${
+                className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
                   activePage === link.id
                     ? "text-blue-800 bg-blue-100"
                     : "text-blue-500 hover:bg-blue-50"
@@ -66,7 +91,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </ul>
 
         {/* Clinic Selection */}
-        <div className="mt-8">
+        <div className="mb-6">
           <p className="text-blue-400 uppercase text-md font-semibold mb-2">
             คลินิกของคุณ
           </p>
@@ -75,7 +100,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <select
               value={selectedClinic ? toIdString(selectedClinic._id) : ""}
               onChange={(e) => handleClinicChange(e.target.value)}
-              className="w-full p-2 bg-blue-50 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+              className="w-full p-2 bg-blue-50 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 text-sm"
             >
               <option value="" disabled>
                 Select a clinic
@@ -95,13 +120,124 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           )}
         </div>
+
+        {/* Clinic Statistics Section */}
+        {selectedClinic && (
+          <div className="mb-6">
+            <div className="flex items-center mb-3">
+              <span className="text-blue-400 uppercase text-md font-semibold">
+                สถิติคลินิก
+              </span>
+              {clinicStats?.isLoading && (
+                <span className="ml-2 animate-spin">⏳</span>
+              )}
+            </div>
+
+            {/* Greeting Card */}
+            <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg mb-3 border border-blue-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-blue-600">{greeting}วัน{thaiDay(new Date())}</div>
+                  <div className="text-xs text-blue-500 mt-1">
+                    {formatThaiDate(new Date())}
+                  </div>
+                </div>
+                <span className="text-2xl">{icon}</span>
+              </div>
+            </div>
+
+            {/* Clinic Name */}
+            <div className="bg-purple-50 p-3 mb-3 rounded-lg border border-purple-100">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-sm font-bold text-purple-700 truncate"
+                    title={selectedClinic.name}
+                  >
+                    {selectedClinic.name.length > 12
+                      ? `${selectedClinic.name.substring(0, 12)}...`
+                      : selectedClinic.name}
+                  </div>
+                  <div className="text-xs text-purple-500">คลินิกปัจจุบัน</div>
+                </div>
+                <span className="text-xl ml-2">🏥</span>
+              </div>
+            </div>
+
+            {/* Statistics Cards */}
+            <div className="space-y-2">
+              {/* Total Patients */}
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-lg font-bold text-blue-700">
+                      {clinicStats?.isLoading
+                        ? "..."
+                        : clinicStats?.totalPatients || 0}
+                    </div>
+                    <div className="text-xs text-blue-500">ผู้ป่วยทั้งหมด</div>
+                  </div>
+                  <span className="text-xl">👥</span>
+                </div>
+              </div>
+
+              {/* Today's New Patients */}
+              <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-lg font-bold text-green-700">
+                      {clinicStats?.isLoading
+                        ? "..."
+                        : clinicStats?.todayNewPatients || 0}
+                    </div>
+                    <div className="text-xs text-green-500">
+                      ผู้ป่วยใหม่วันนี้
+                    </div>
+                  </div>
+                  <span className="text-xl">✨</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Last Updated */}
+            {clinicStats?.lastUpdated && !clinicStats.isLoading && (
+              <div className="mt-3 text-xs text-blue-400 text-center">
+                อัปเดตล่าสุด:{" "}
+                {new Date(clinicStats.lastUpdated).toLocaleTimeString("th-TH", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </div>
+            )}
+
+            {/* Loading State */}
+            {clinicStats?.isLoading && (
+              <div className="mt-3 text-center">
+                <div className="bg-blue-50 p-2 rounded-lg border border-blue-100">
+                  <div className="text-xs text-blue-500">กำลังโหลดสถิติ...</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* No Clinic Selected State */}
+        {!selectedClinic && clinics && clinics.length > 0 && (
+          <div className="mb-6">
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 text-center">
+              <div className="text-3xl mb-2">🏥</div>
+              <div className="text-sm text-blue-600 mb-1">เลือกคลินิก</div>
+              <div className="text-xs text-blue-400">เพื่อดูสถิติและข้อมูล</div>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Settings Bottom Section */}
       <div className="p-4 border-t border-blue-100">
         <Link
           href="/settings"
-          className={`flex items-center px-4 py-3 rounded-lg ${
+          className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
             activePage === "settings"
               ? "text-blue-800 bg-blue-100"
               : "text-blue-500 hover:bg-blue-50"
