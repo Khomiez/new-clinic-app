@@ -146,7 +146,7 @@ export default function Login() {
             khom2559@gmail.com
           </p>
           <p className="text-xs text-blue-300 mt-2">
-            © 2025 Medical Clinic Staff v.1.0
+            © 2025 Medical Clinic Staff v.1.1
           </p>
         </div>
       </div>
