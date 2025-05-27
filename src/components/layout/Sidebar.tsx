@@ -1,4 +1,4 @@
-// src/components/layout/Sidebar.tsx - Enhanced with clinic statistics
+// src/components/layout/Sidebar.tsx - Enhanced with time-based color theming
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { IClinic } from "@/interfaces";
@@ -21,6 +21,19 @@ interface SidebarProps {
     totalPages: number;
     isLoading: boolean;
     lastUpdated?: Date;
+  };
+}
+
+// Time-based color theme configuration
+interface TimeTheme {
+  greeting: string;
+  icon: string;
+  colors: {
+    background: string;
+    border: string;
+    textPrimary: string;
+    textSecondary: string;
+    iconGlow?: string;
   };
 }
 
@@ -50,19 +63,168 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const thaiDay = (date: Date): string => {
-    const days = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+    const days = [
+      "อาทิตย์",
+      "จันทร์",
+      "อังคาร",
+      "พุธ",
+      "พฤหัสบดี",
+      "ศุกร์",
+      "เสาร์",
+    ];
     return days[date.getDay()];
   };
 
-  // Get greeting based on time of day
-  const getTimeBasedGreeting = (): { greeting: string; icon: string } => {
-    const hour = new Date().getHours();
-    if (hour < 12) return { greeting: "สวัสดีตอนเช้า", icon: "🌅" };
-    if (hour < 17) return { greeting: "สวัสดีตอนบ่าย", icon: "☀️" };
-    return { greeting: "สวัสดีตอนเย็น", icon: "🌆" };
+  // Get Thai day color names
+  const getDayColorName = (dayOfWeek: number): string => {
+    const colors = ["แดง", "เหลือง", "ชมพู", "เขียว", "ส้ม", "ฟ้า", "ม่วง"];
+    return colors[dayOfWeek];
   };
 
-  const { greeting, icon } = getTimeBasedGreeting();
+  // Thai day-of-the-week color theming based on traditional Thai color associations
+  const getDayBasedTheme = (): TimeTheme => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const hour = today.getHours();
+
+    // Get time-based greeting
+    const getTimeGreeting = (): { greeting: string; icon: string } => {
+      if (hour >= 5 && hour < 12)
+        return { greeting: "สวัสดีตอนเช้า", icon: "🌅" };
+      if (hour >= 12 && hour < 17)
+        return { greeting: "สวัสดีตอนบ่าย", icon: "☀️" };
+      if (hour >= 17 && hour < 20)
+        return { greeting: "สวัสดีตอนเย็น", icon: "🌆" };
+      return { greeting: "สวัสดีตอนค่ำ", icon: "🌙" };
+    };
+
+    const { greeting, icon } = getTimeGreeting();
+
+    // Thai traditional day colors with modern pastel adaptations
+    switch (dayOfWeek) {
+      case 0: // Sunday (วันอาทิตย์) - Red (สีแดง)
+        return {
+          greeting,
+          icon,
+          colors: {
+            background: "bg-gradient-to-r from-red-200 to-red-50",
+            border: "border-red-400",
+            textPrimary: "text-red-700",
+            textSecondary: "text-red-500",
+            iconGlow: "drop-shadow-md",
+          },
+        };
+
+      case 1: // Monday (วันจันทร์) - Yellow (สีเหลือง)
+        return {
+          greeting,
+          icon,
+          colors: {
+            background: "bg-gradient-to-r from-yellow-200 to-amber-50",
+            border: "border-yellow-400",
+            textPrimary: "text-yellow-700",
+            textSecondary: "text-yellow-600",
+            iconGlow: "drop-shadow-md",
+          },
+        };
+
+      case 2: // Tuesday (วันอังคาร) - Pink (สีชมพู)
+        return {
+          greeting,
+          icon,
+          colors: {
+            background: "bg-gradient-to-r from-pink-200 to-rose-50",
+            border: "border-pink-400",
+            textPrimary: "text-pink-700",
+            textSecondary: "text-pink-500",
+            iconGlow: "drop-shadow-md",
+          },
+        };
+
+      case 3: // Wednesday (วันพุธ) - Green (สีเขียว)
+        return {
+          greeting,
+          icon,
+          colors: {
+            background: "bg-gradient-to-r from-green-200 to-emerald-50",
+            border: "border-green-400",
+            textPrimary: "text-green-700",
+            textSecondary: "text-green-600",
+            iconGlow: "drop-shadow-md",
+          },
+        };
+
+      case 4: // Thursday (วันพฤหัสบดี) - Orange (สีส้ม)
+        return {
+          greeting,
+          icon,
+          colors: {
+            background: "bg-gradient-to-r from-orange-200 to-amber-50",
+            border: "border-orange-400",
+            textPrimary: "text-orange-700",
+            textSecondary: "text-orange-600",
+            iconGlow: "drop-shadow-md",
+          },
+        };
+
+      case 5: // Friday (วันศุกร์) - Blue (สีฟ้า)
+        return {
+          greeting,
+          icon,
+          colors: {
+            background: "bg-gradient-to-r from-blue-200 to-sky-50",
+            border: "border-blue-400",
+            textPrimary: "text-blue-700",
+            textSecondary: "text-blue-600",
+            iconGlow: "drop-shadow-md",
+          },
+        };
+
+      case 6: // Saturday (วันเสาร์) - Purple (สีม่วง)
+        return {
+          greeting,
+          icon,
+          colors: {
+            background: "bg-gradient-to-r from-purple-200 to-violet-50",
+            border: "border-purple-400",
+            textPrimary: "text-purple-700",
+            textSecondary: "text-purple-600",
+            iconGlow: "drop-shadow-md",
+          },
+        };
+
+      default:
+        // Fallback (should never happen)
+        return {
+          greeting,
+          icon,
+          colors: {
+            background: "bg-gradient-to-r from-blue-50 to-blue-100",
+            border: "border-blue-200",
+            textPrimary: "text-blue-600",
+            textSecondary: "text-blue-500",
+          },
+        };
+    }
+  };
+
+  // State for current day theme (updates when day changes)
+  const [currentTheme, setCurrentTheme] = useState<TimeTheme>(getDayBasedTheme);
+
+  // Update theme when day changes or time changes (for greeting)
+  useEffect(() => {
+    const updateTheme = () => {
+      setCurrentTheme(getDayBasedTheme());
+    };
+
+    // Update immediately
+    updateTheme();
+
+    // Set up interval to update every hour (for time-based greeting changes)
+    const interval = setInterval(updateTheme, 60 * 60 * 1000); // 1 hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="w-64 bg-white shadow-md h-[calc(100vh-4.1rem)] flex flex-col">
@@ -133,16 +295,52 @@ const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
 
-            {/* Greeting Card */}
-            <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded-lg mb-3 border border-blue-200">
+            {/* Enhanced Dynamic Day-Based Greeting Card */}
+            <div
+              className={`
+                ${currentTheme.colors.background} 
+                p-3 rounded-lg mb-3 border 
+                ${currentTheme.colors.border}
+                transition-all duration-500 ease-in-out
+                transform hover:scale-[1.02] hover:shadow-lg
+                relative overflow-hidden
+              `}
+            >
+              {/* Optional: Day color indicator strip */}
+              <div
+                className={`
+                  absolute top-0 left-0 right-0 h-1 
+                  ${currentTheme.colors.background
+                    .replace("from-", "bg-")
+                    .replace(" to-", "")
+                    .split(" ")[0]
+                    .replace("50", "200")}
+                `}
+              />
+
               <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-blue-600">{greeting}วัน{thaiDay(new Date())}</div>
-                  <div className="text-xs text-blue-500 mt-1">
+                <div className="flex-1">
+                  <div
+                    className={`text-sm font-medium ${currentTheme.colors.textPrimary}`}
+                  >
+                    {currentTheme.greeting}วัน{thaiDay(new Date())}
+                  </div>
+                  <div
+                    className={`text-xs ${currentTheme.colors.textSecondary} mt-1`}
+                  >
                     {formatThaiDate(new Date())}
                   </div>
                 </div>
-                <span className="text-2xl">{icon}</span>
+                <span
+                  className={`
+                    text-3xl ml-3 
+                    ${currentTheme.colors.iconGlow || ""} 
+                    transition-all duration-300 
+                    hover:scale-110 hover:rotate-12
+                  `}
+                >
+                  {currentTheme.icon}
+                </span>
               </div>
             </div>
 
@@ -167,7 +365,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             {/* Statistics Cards */}
             <div className="space-y-2">
               {/* Total Patients */}
-              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 transition-colors hover:bg-blue-100">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-lg font-bold text-blue-700">
@@ -182,7 +380,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               {/* Today's New Patients */}
-              <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+              <div className="bg-green-50 p-3 rounded-lg border border-green-100 transition-colors hover:bg-green-100">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-lg font-bold text-green-700">
