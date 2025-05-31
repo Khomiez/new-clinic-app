@@ -4,6 +4,7 @@ export * from './paginationHelpers';
 export * from './fileUtils';
 export * from './getPatientModel';
 export * from './cloudinaryConfig';
+export * from './colorUtils';
 
 // Export temporary file storage utilities with proper type exports
 export type {

@@ -1,8 +1,14 @@
-// src/components/layout/Sidebar.tsx - Enhanced with time-based color theming
+// src/components/layout/Sidebar.tsx - Enhanced with clinic colors
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { IClinic } from "@/interfaces";
 import { toIdString } from "@/utils/mongoHelpers";
+import { 
+  generateClinicColorTheme, 
+  applyClinicColorTheme,
+  lightenColor,
+  getContrastTextColor
+} from "@/utils/colorUtils";
 
 interface SidebarProps {
   clinics: IClinic[];
@@ -52,6 +58,16 @@ const Sidebar: React.FC<SidebarProps> = ({
     // { id: "medications", name: "Medications", icon: "💊", href: "#" },
   ];
 
+  // Apply clinic color theme when selected clinic changes
+  useEffect(() => {
+    if (selectedClinic?.color) {
+      applyClinicColorTheme(selectedClinic.color);
+    } else {
+      // Reset to default blue theme
+      applyClinicColorTheme('#3B82F6');
+    }
+  }, [selectedClinic?.color]);
+
   // Format today's date in Thai
   const formatThaiDate = (date: Date): string => {
     return date.toLocaleDateString("th-TH", {
@@ -75,12 +91,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     return days[date.getDay()];
   };
 
-  // Get Thai day color names
-  const getDayColorName = (dayOfWeek: number): string => {
-    const colors = ["แดง", "เหลือง", "ชมพู", "เขียว", "ส้ม", "ฟ้า", "ม่วง"];
-    return colors[dayOfWeek];
-  };
-
   // Thai day-of-the-week color theming based on traditional Thai color associations
   const getDayBasedTheme = (): TimeTheme => {
     const today = new Date();
@@ -100,7 +110,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
     const { greeting, icon } = getTimeGreeting();
 
-    // Thai traditional day colors with modern pastel adaptations
+    // ALWAYS use traditional day colors regardless of clinic selection
     switch (dayOfWeek) {
       case 0: // Sunday (วันอาทิตย์) - Red (สีแดง)
         return {
@@ -211,7 +221,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   // State for current day theme (updates when day changes)
   const [currentTheme, setCurrentTheme] = useState<TimeTheme>(getDayBasedTheme);
 
-  // Update theme when day changes or time changes (for greeting)
+  // Update theme when day changes or clinic changes
   useEffect(() => {
     const updateTheme = () => {
       setCurrentTheme(getDayBasedTheme());
@@ -224,10 +234,37 @@ const Sidebar: React.FC<SidebarProps> = ({
     const interval = setInterval(updateTheme, 60 * 60 * 1000); // 1 hour
 
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedClinic?.color]);
+
+  // Generate clinic-specific styles
+  const getClinicStyles = (clinic: IClinic) => {
+    if (!clinic.color) {
+      return {
+        backgroundColor: '#8B5CF6', // Default purple
+        color: '#FFFFFF',
+        lightBackground: '#F3F4F6',
+        borderColor: '#E5E7EB',
+      };
+    }
+
+    const theme = generateClinicColorTheme(clinic.color);
+    return {
+      backgroundColor: clinic.color,
+      color: theme.textContrast,
+      lightBackground: theme.primaryLight,
+      borderColor: theme.border,
+    };
+  };
 
   return (
-    <div className="w-64 bg-white shadow-md h-[calc(100vh-4.1rem)] flex flex-col">
+    <div 
+      className="w-64 bg-white shadow-md h-[calc(100vh-4.1rem)] flex flex-col transition-all duration-300"
+      style={{
+        background: selectedClinic?.color 
+          ? `linear-gradient(to bottom, ${lightenColor(selectedClinic.color, 0.98)}, white)`
+          : undefined
+      }}
+    >
       {/* Navigation */}
       <nav className="p-4 flex-grow">
         <p className="text-blue-400 uppercase text-md font-semibold mb-2">
@@ -241,8 +278,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                 href={link.href}
                 className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
                   activePage === link.id
-                    ? "text-blue-800 bg-blue-100"
-                    : "text-blue-500 hover:bg-blue-50"
+                    ? selectedClinic?.color
+                      ? `text-[${selectedClinic.color}] bg-[${lightenColor(selectedClinic.color, 0.9)}]`
+                      : "text-blue-800 bg-blue-100"
+                    : selectedClinic?.color
+                      ? `text-[${lightenColor(selectedClinic.color, 0.2)}] hover:bg-[${lightenColor(selectedClinic.color, 0.95)}]`
+                      : "text-blue-500 hover:bg-blue-50"
                 }`}
               >
                 <span className="mr-3">{link.icon}</span>
@@ -259,23 +300,62 @@ const Sidebar: React.FC<SidebarProps> = ({
           </p>
 
           {clinics && clinics.length > 0 ? (
-            <select
-              value={selectedClinic ? toIdString(selectedClinic._id) : ""}
-              onChange={(e) => handleClinicChange(e.target.value)}
-              className="w-full p-2 bg-blue-50 border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 text-sm"
-            >
-              <option value="" disabled>
-                Select a clinic
-              </option>
-              {clinics.map((clinic) => (
-                <option
-                  key={toIdString(clinic._id)}
-                  value={toIdString(clinic._id)}
-                >
-                  {clinic.name}
+            <div className="space-y-2">
+              {/* Enhanced Clinic Selector */}
+              <select
+                value={selectedClinic ? toIdString(selectedClinic._id) : ""}
+                onChange={(e) => handleClinicChange(e.target.value)}
+                className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 text-sm transition-all"
+                style={{
+                  backgroundColor: selectedClinic?.color 
+                    ? lightenColor(selectedClinic.color, 0.95)
+                    : '#EBF5FF',
+                  borderColor: selectedClinic?.color 
+                    ? lightenColor(selectedClinic.color, 0.7)
+                    : '#DBEAFE',
+                  color: selectedClinic?.color || '#1E40AF'
+                }}
+              >
+                <option value="" disabled>
+                  Select a clinic
                 </option>
-              ))}
-            </select>
+                {clinics.map((clinic) => (
+                  <option
+                    key={toIdString(clinic._id)}
+                    value={toIdString(clinic._id)}
+                  >
+                    {clinic.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Clinic Color Indicators */}
+              <div className="flex flex-wrap gap-2">
+                {clinics.map((clinic) => {
+                  const styles = getClinicStyles(clinic);
+                  const isSelected = selectedClinic && toIdString(clinic._id) === toIdString(selectedClinic._id);
+                  
+                  return (
+                    <button
+                      key={toIdString(clinic._id)}
+                      onClick={() => handleClinicChange(toIdString(clinic._id))}
+                      className={`
+                        w-4 h-4 rounded-full border-2 transition-all duration-200 hover:scale-110
+                        ${isSelected ? 'scale-125 shadow-lg' : ''}
+                      `}
+                      style={{
+                        backgroundColor: clinic.color || '#8B5CF6',
+                        borderColor: isSelected ? '#FFFFFF' : 'transparent',
+                        boxShadow: isSelected 
+                          ? `0 0 0 2px ${clinic.color || '#8B5CF6'}40` 
+                          : 'none',
+                      }}
+                      title={clinic.name}
+                    />
+                  );
+                })}
+              </div>
+            </div>
           ) : (
             <div className="text-blue-400 text-sm p-2 bg-blue-50 rounded-lg">
               No clinics available
@@ -344,25 +424,47 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
 
-            {/* Clinic Name */}
-            <div className="bg-purple-50 p-3 mb-3 rounded-lg border border-purple-100">
+            {/* Enhanced Clinic Name Card with Dynamic Colors - ONLY THIS CARD USES CLINIC COLORS */}
+            <div 
+              className="p-3 mb-3 rounded-lg border transition-all duration-300 hover:shadow-md"
+              style={{
+                backgroundColor: selectedClinic.color 
+                  ? lightenColor(selectedClinic.color, 0.92)
+                  : '#F3F4F6',
+                borderColor: selectedClinic.color 
+                  ? lightenColor(selectedClinic.color, 0.7)
+                  : '#E5E7EB',
+              }}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <div
-                    className="text-sm font-bold text-purple-700 truncate"
+                    className="text-sm font-bold truncate"
+                    style={{ 
+                      color: selectedClinic.color || '#6B7280'
+                    }}
                     title={selectedClinic.name}
                   >
                     {selectedClinic.name.length > 12
                       ? `${selectedClinic.name.substring(0, 12)}...`
                       : selectedClinic.name}
                   </div>
-                  <div className="text-xs text-purple-500">คลินิกปัจจุบัน</div>
+                  <div 
+                    className="text-xs"
+                    style={{ 
+                      color: selectedClinic.color 
+                        ? lightenColor(selectedClinic.color, 0.3)
+                        : '#9CA3AF'
+                    }}
+                  >
+                    คลินิกปัจจุบัน
+                  </div>
                 </div>
                 <span className="text-xl ml-2">🏥</span>
               </div>
             </div>
 
-            {/* Statistics Cards */}
+            {/* Statistics Cards - BACK TO ORIGINAL BLUE THEME */}
             <div className="space-y-2">
               {/* Total Patients */}
               <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 transition-colors hover:bg-blue-100">
@@ -397,7 +499,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
 
-            {/* Last Updated */}
+            {/* Last Updated - BACK TO ORIGINAL BLUE */}
             {clinicStats?.lastUpdated && !clinicStats.isLoading && (
               <div className="mt-3 text-xs text-blue-400 text-center">
                 อัปเดตล่าสุด:{" "}
@@ -408,7 +510,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
 
-            {/* Loading State */}
+            {/* Loading State - BACK TO ORIGINAL BLUE */}
             {clinicStats?.isLoading && (
               <div className="mt-3 text-center">
                 <div className="bg-blue-50 p-2 rounded-lg border border-blue-100">
@@ -437,8 +539,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           href="/settings"
           className={`flex items-center px-4 py-3 rounded-lg transition-colors ${
             activePage === "settings"
-              ? "text-blue-800 bg-blue-100"
-              : "text-blue-500 hover:bg-blue-50"
+              ? selectedClinic?.color
+                ? `text-[${selectedClinic.color}] bg-[${lightenColor(selectedClinic.color, 0.9)}]`
+                : "text-blue-800 bg-blue-100"
+              : selectedClinic?.color
+                ? `text-[${lightenColor(selectedClinic.color, 0.2)}] hover:bg-[${lightenColor(selectedClinic.color, 0.95)}]`
+                : "text-blue-500 hover:bg-blue-50"
           }`}
         >
           <span className="mr-3">⚙️</span>

@@ -7,6 +7,7 @@ export interface IClinic {
   address?: string;
   phone: string[];
   managerId: Array<Types.ObjectId | string>;
+  color?: string; // NEW: Hex color code (e.g., "#3B82F6")
   createdAt?: Date;
   updatedAt?: Date;
 }
