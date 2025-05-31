@@ -1,6 +1,7 @@
-// src/components/layout/Sidebar.tsx - Enhanced with clinic colors
+// src/components/layout/Sidebar.tsx - Enhanced with clinic lock for edit mode  
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation"; // NEW: Import to detect current path
 import { IClinic } from "@/interfaces";
 import { toIdString } from "@/utils/mongoHelpers";
 import { 
@@ -50,6 +51,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   activePage = "dashboard",
   clinicStats,
 }) => {
+  // NEW: Get current pathname to determine if we're in edit mode
+  const pathname = usePathname();
+  const isEditMode = pathname?.includes('/patients/edit/') || false;
+
   // Navigation links configuration
   const navLinks = [
     { id: "dashboard", name: "Dashboard", icon: "📊", href: "/dashboard" },
@@ -256,6 +261,16 @@ const Sidebar: React.FC<SidebarProps> = ({
     };
   };
 
+  // NEW: Handle clinic change with edit mode protection
+  const handleClinicChangeWithProtection = (clinicId: string) => {
+    if (isEditMode) {
+      // Show warning in edit mode
+      alert("ไม่สามารถเปลี่ยนคลินิกขณะแก้ไขข้อมูลผู้ป่วย กรุณาบันทึกหรือยกเลิกการแก้ไขก่อน");
+      return;
+    }
+    handleClinicChange(clinicId);
+  };
+
   return (
     <div 
       className="w-64 bg-white shadow-md h-[calc(100vh-4.1rem)] flex flex-col transition-all duration-300"
@@ -293,31 +308,51 @@ const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </ul>
 
-        {/* Clinic Selection */}
+        {/* Clinic Selection - UPDATED with edit mode protection */}
         <div className="mb-6">
-          <p className="text-blue-400 uppercase text-md font-semibold mb-2">
-            คลินิกของคุณ
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-blue-400 uppercase text-md font-semibold">
+              คลินิกของคุณ
+            </p>
+            {/* NEW: Edit mode indicator */}
+            {isEditMode && (
+              <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
+                🔒 LOCKED
+              </span>
+            )}
+          </div>
 
           {clinics && clinics.length > 0 ? (
             <div className="space-y-2">
-              {/* Enhanced Clinic Selector */}
+              {/* Enhanced Clinic Selector - UPDATED with edit mode protection */}
               <select
                 value={selectedClinic ? toIdString(selectedClinic._id) : ""}
-                onChange={(e) => handleClinicChange(e.target.value)}
-                className="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 text-sm transition-all"
+                onChange={(e) => handleClinicChangeWithProtection(e.target.value)}
+                disabled={isEditMode} // NEW: Disable in edit mode
+                className={`w-full p-2 border rounded-lg focus:outline-none focus:ring-2 text-sm transition-all ${
+                  isEditMode 
+                    ? 'cursor-not-allowed opacity-60 bg-gray-100' 
+                    : ''
+                }`}
                 style={{
-                  backgroundColor: selectedClinic?.color 
-                    ? lightenColor(selectedClinic.color, 0.95)
-                    : '#EBF5FF',
-                  borderColor: selectedClinic?.color 
-                    ? lightenColor(selectedClinic.color, 0.7)
-                    : '#DBEAFE',
-                  color: selectedClinic?.color || '#1E40AF'
+                  backgroundColor: isEditMode 
+                    ? '#F3F4F6' 
+                    : selectedClinic?.color 
+                      ? lightenColor(selectedClinic.color, 0.95)
+                      : '#EBF5FF',
+                  borderColor: isEditMode
+                    ? '#D1D5DB'
+                    : selectedClinic?.color 
+                      ? lightenColor(selectedClinic.color, 0.7)
+                      : '#DBEAFE',
+                  color: isEditMode
+                    ? '#6B7280'
+                    : selectedClinic?.color || '#1E40AF'
                 }}
+                title={isEditMode ? "ไม่สามารถเปลี่ยนคลินิกขณะแก้ไขข้อมูลผู้ป่วย" : "เลือกคลินิก"}
               >
                 <option value="" disabled>
-                  Select a clinic
+                  {isEditMode ? "คลินิกถูกล็อค (กำลังแก้ไข)" : "Select a clinic"}
                 </option>
                 {clinics.map((clinic) => (
                   <option
@@ -329,7 +364,24 @@ const Sidebar: React.FC<SidebarProps> = ({
                 ))}
               </select>
 
-              {/* Clinic Color Indicators */}
+              {/* NEW: Edit mode warning */}
+              {isEditMode && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                  <div className="flex items-start space-x-2">
+                    <span className="text-orange-500 text-sm">⚠️</span>
+                    <div>
+                      <p className="text-xs text-orange-700 font-medium">
+                        การเปลี่ยนคลินิกถูกปิดใช้งาน
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        กรุณาบันทึกหรือยกเลิกการแก้ไขก่อนเปลี่ยนคลินิก
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Clinic Color Indicators - UPDATED with edit mode styling */}
               <div className="flex flex-wrap gap-2">
                 {clinics.map((clinic) => {
                   const styles = getClinicStyles(clinic);
@@ -338,9 +390,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                   return (
                     <button
                       key={toIdString(clinic._id)}
-                      onClick={() => handleClinicChange(toIdString(clinic._id))}
+                      onClick={() => handleClinicChangeWithProtection(toIdString(clinic._id))}
+                      disabled={isEditMode} // NEW: Disable in edit mode
                       className={`
-                        w-4 h-4 rounded-full border-2 transition-all duration-200 hover:scale-110
+                        w-4 h-4 rounded-full border-2 transition-all duration-200 
+                        ${isEditMode 
+                          ? 'cursor-not-allowed opacity-50' 
+                          : 'hover:scale-110 cursor-pointer'
+                        }
                         ${isSelected ? 'scale-125 shadow-lg' : ''}
                       `}
                       style={{
@@ -350,7 +407,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                           ? `0 0 0 2px ${clinic.color || '#8B5CF6'}40` 
                           : 'none',
                       }}
-                      title={clinic.name}
+                      title={isEditMode 
+                        ? `${clinic.name} (ล็อคการเปลี่ยนแปลง)`
+                        : clinic.name
+                      }
                     />
                   );
                 })}
@@ -363,6 +423,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
+        {/* Rest of the component remains the same... */}
         {/* Clinic Statistics Section */}
         {selectedClinic && (
           <div className="mb-6">

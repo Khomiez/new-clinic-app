@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - UPDATED: Complete temporary file upload support with clinic colors
+// src/app/(protected)/patients/edit/[id]/page.tsx - FIXED: Clinic info display and locked clinic selection
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -84,7 +84,7 @@ export default function EditPatient({ params }: PageProps) {
   // NEW: State for tracking temporary files (pending uploads)
   const [temporaryFiles, setTemporaryFiles] = useState<TemporaryFile[]>([]);
 
-  // State for clinics
+  // State for clinics - FIXED: Better clinic state management
   const [selectedClinic, setSelectedClinic] = useState<IClinic | undefined>(
     undefined
   );
@@ -92,27 +92,50 @@ export default function EditPatient({ params }: PageProps) {
   // State for showing discard confirmation
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
 
-  // Generate dynamic styles based on clinic color
+  // FIXED: Safe helper functions for clinic color handling
+  const getClinicColor = (clinic: IClinic | undefined): string | undefined => {
+    return clinic?.color;
+  };
+
+  const getClinicColorWithFallback = (
+    clinic: IClinic | undefined, 
+    fallback: string
+  ): string => {
+    return clinic?.color || fallback;
+  };
+
+  const getClinicLightColor = (
+    clinic: IClinic | undefined, 
+    amount: number = 0.9
+  ): string => {
+    if (!clinic?.color) return '#EBF8FF';
+    return lightenColor(clinic.color, amount);
+  };
+
+  // FIXED: Generate dynamic styles with proper fallbacks
   const getDynamicStyles = () => {
-    if (!selectedClinic?.color) {
+    const clinicColor = getClinicColor(selectedClinic);
+    
+    if (!clinicColor) {
       return {
-        backgroundClass: "bg-gradient-to-br from-blue-50 to-white",
-        cardBg: "bg-white",
-        buttonBg: "bg-blue-500 hover:bg-blue-600",
-        borderColor: "border-blue-100",
-        textColor: "text-blue-800",
-        subTextColor: "text-slate-500",
+        background: 'linear-gradient(135deg, #EBF8FF 0%, white 100%)',
+        cardBorderColor: '#DBEAFE',
+        inputBackground: '#EBF8FF',
+        inputBorderColor: '#DBEAFE',
+        textColor: '#1E40AF',
+        buttonColor: '#3B82F6',
+        buttonHoverColor: '#1D4ED8',
       };
     }
 
-    const theme = generateClinicColorTheme(selectedClinic.color);
     return {
-      backgroundClass: `bg-gradient-to-br from-[${theme.primaryLight}] to-white`,
-      cardBg: "bg-white",
-      buttonBg: `bg-[${selectedClinic.color}] hover:bg-[${lightenColor(selectedClinic.color, -0.1)}]`,
-      borderColor: `border-[${theme.border}]`,
-      textColor: selectedClinic.color,
-      subTextColor: lightenColor(selectedClinic.color, 0.3),
+      background: `linear-gradient(135deg, ${lightenColor(clinicColor, 0.97)} 0%, white 100%)`,
+      cardBorderColor: lightenColor(clinicColor, 0.8),
+      inputBackground: lightenColor(clinicColor, 0.95),
+      inputBorderColor: lightenColor(clinicColor, 0.8),
+      textColor: clinicColor,
+      buttonColor: clinicColor,
+      buttonHoverColor: lightenColor(clinicColor, -0.1),
     };
   };
 
@@ -139,20 +162,22 @@ export default function EditPatient({ params }: PageProps) {
     }
   }, [adminInfo.loading, adminInfo.id, dispatch]);
 
-  // Set selected clinic based on URL param
+  // FIXED: Set selected clinic based on URL param with proper clinic data
   useEffect(() => {
     if (
       clinicsState.loading === "succeeded" &&
       Array.isArray(clinicsState.items) &&
-      clinicsState.items.length > 0
+      clinicsState.items.length > 0 &&
+      clinicId
     ) {
-      if (clinicId) {
-        const clinic = clinicsState.items.find(
-          (c) => toIdString(c._id) === clinicId
-        );
-        if (clinic) {
-          setSelectedClinic(clinic);
-        }
+      const clinic = clinicsState.items.find(
+        (c) => toIdString(c._id) === clinicId
+      );
+      if (clinic) {
+        console.log('Setting selected clinic:', clinic);
+        setSelectedClinic(clinic);
+      } else {
+        console.warn('Clinic not found for ID:', clinicId);
       }
     }
   }, [clinicsState.loading, clinicsState.items, clinicId]);
@@ -521,16 +546,10 @@ export default function EditPatient({ params }: PageProps) {
     setShowDiscardConfirmation(false);
   };
 
-  // Clinic selection change handler
+  // FIXED: Clinic selection change handler - DISABLED in edit mode
   const handleClinicChange = (clinicId: string): void => {
-    if (!clinicId) return;
-
-    const clinic = clinicsState.items.find(
-      (c) => toIdString(c._id) === clinicId
-    );
-    if (clinic) {
-      setSelectedClinic(clinic);
-    }
+    // Do nothing in edit mode - clinic is locked
+    console.warn('Clinic change attempted in edit mode - operation blocked');
   };
 
   // Medical History handlers
@@ -820,12 +839,8 @@ export default function EditPatient({ params }: PageProps) {
 
   return (
     <div 
-      className={`min-h-screen transition-all duration-500`}
-      style={{
-        background: selectedClinic?.color 
-          ? `linear-gradient(135deg, ${lightenColor(selectedClinic.color, 0.97)} 0%, white 100%)`
-          : 'linear-gradient(135deg, #EBF8FF 0%, white 100%)'
-      }}
+      className="min-h-screen transition-all duration-500"
+      style={{ background: dynamicStyles.background }}
     >
       {/* Discard Confirmation Modal */}
       {showDiscardConfirmation && (
@@ -833,7 +848,7 @@ export default function EditPatient({ params }: PageProps) {
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
             <h3 
               className="text-xl font-bold mb-4"
-              style={{ color: selectedClinic?.color || '#DC2626' }}
+              style={{ color: dynamicStyles.textColor }}
             >
               Discard Changes?
             </h3>
@@ -866,9 +881,7 @@ export default function EditPatient({ params }: PageProps) {
               <button
                 onClick={confirmDiscard}
                 className="flex-1 py-2 text-white rounded-lg transition"
-                style={{
-                  backgroundColor: selectedClinic?.color || '#DC2626',
-                }}
+                style={{ backgroundColor: '#DC2626' }}
               >
                 Discard Changes
               </button>
@@ -887,7 +900,7 @@ export default function EditPatient({ params }: PageProps) {
         <Sidebar
           clinics={Array.isArray(clinicsState.items) ? clinicsState.items : []}
           selectedClinic={selectedClinic}
-          handleClinicChange={handleClinicChange}
+          handleClinicChange={handleClinicChange} // FIXED: This will now do nothing in edit mode
         />
 
         <div className="flex-grow p-8">
@@ -896,7 +909,7 @@ export default function EditPatient({ params }: PageProps) {
             <div>
               <h1 
                 className="text-2xl font-semibold flex items-center gap-2"
-                style={{ color: selectedClinic?.color || '#1E40AF' }}
+                style={{ color: dynamicStyles.textColor }}
               >
                 แก้ไขข้อมูลผู้ป่วย <span className="text-xl">👩‍⚕️</span>
                 {hasUnsavedChanges && (
@@ -906,7 +919,7 @@ export default function EditPatient({ params }: PageProps) {
                 )}
               </h1>
               <p 
-                style={{ color: selectedClinic?.color ? lightenColor(selectedClinic.color, 0.3) : '#64748B' }}
+                className="text-slate-500"
               >
                 ปรับปรุงข้อมูลผู้ป่วยและประวัติการรักษา
               </p>
@@ -927,11 +940,7 @@ export default function EditPatient({ params }: PageProps) {
             <div className="flex gap-3">
               <button
                 onClick={handleDiscard}
-                className="px-4 py-2 rounded-lg transition flex items-center gap-1"
-                style={{
-                  backgroundColor: lightenColor(selectedClinic?.color || '#3B82F6', 0.9),
-                  color: selectedClinic?.color || '#1D4ED8',
-                }}
+                className="px-4 py-2 rounded-lg transition flex items-center gap-1 border border-gray-300 text-gray-600 hover:bg-gray-50"
                 disabled={isSaving}
               >
                 <span>Cancel</span> ❌
@@ -940,9 +949,7 @@ export default function EditPatient({ params }: PageProps) {
                 onClick={handleSave}
                 disabled={isSaving || !hasUnsavedChanges}
                 className="flex items-center text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
-                style={{
-                  backgroundColor: selectedClinic?.color || '#3B82F6',
-                }}
+                style={{ backgroundColor: dynamicStyles.buttonColor }}
               >
                 {isSaving ? (
                   <>
@@ -956,21 +963,51 @@ export default function EditPatient({ params }: PageProps) {
             </div>
           </div>
 
+          {/* FIXED: Clinic Info Display */}
+          {selectedClinic && (
+            <div className="mb-6">
+              <div 
+                className="bg-white rounded-xl p-4 shadow-sm border transition-all duration-300"
+                style={{ borderColor: dynamicStyles.cardBorderColor }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <span className="text-2xl">🏥</span>
+                    <div>
+                      <h3 
+                        className="font-bold"
+                        style={{ color: dynamicStyles.textColor }}
+                      >
+                        {selectedClinic.name}
+                      </h3>
+                      <p className="text-sm text-gray-500">คลินิกปัจจุบัน (ล็อคการเปลี่ยนแปลง)</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                      🔒 EDIT MODE
+                    </span>
+                    <div 
+                      className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
+                      style={{ backgroundColor: selectedClinic.color || '#3B82F6' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Patient Information Card */}
             <div className="lg:col-span-1">
               <div 
                 className="bg-white rounded-xl p-6 shadow-sm border transition-all duration-300"
-                style={{
-                  borderColor: selectedClinic?.color 
-                    ? lightenColor(selectedClinic.color, 0.8)
-                    : '#DBEAFE'
-                }}
+                style={{ borderColor: dynamicStyles.cardBorderColor }}
               >
                 <h2 
                   className="text-xl font-medium mb-4 flex items-center gap-2"
-                  style={{ color: selectedClinic?.color || '#1D4ED8' }}
+                  style={{ color: dynamicStyles.textColor }}
                 >
                   ข้อมูลผู้ป่วย 📋
                 </h2>
@@ -994,13 +1031,9 @@ export default function EditPatient({ params }: PageProps) {
                         required
                         className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-colors"
                         style={{
-                          backgroundColor: selectedClinic?.color 
-                            ? lightenColor(selectedClinic.color, 0.95)
-                            : '#EBF8FF',
-                          borderColor: selectedClinic?.color 
-                            ? lightenColor(selectedClinic.color, 0.8)
-                            : '#DBEAFE',
-                          color: selectedClinic?.color || '#1E40AF',
+                          backgroundColor: dynamicStyles.inputBackground,
+                          borderColor: dynamicStyles.inputBorderColor,
+                          color: dynamicStyles.textColor,
                         }}
                       />
                     </div>
@@ -1041,13 +1074,9 @@ export default function EditPatient({ params }: PageProps) {
                       placeholder="Enter ID number (optional)"
                       className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-colors"
                       style={{
-                        backgroundColor: selectedClinic?.color 
-                          ? lightenColor(selectedClinic.color, 0.95)
-                          : '#EBF8FF',
-                        borderColor: selectedClinic?.color 
-                          ? lightenColor(selectedClinic.color, 0.8)
-                          : '#DBEAFE',
-                        color: selectedClinic?.color || '#1E40AF',
+                        backgroundColor: dynamicStyles.inputBackground,
+                        borderColor: dynamicStyles.inputBorderColor,
+                        color: dynamicStyles.textColor,
                       }}
                     />
                   </div>
@@ -1076,17 +1105,13 @@ export default function EditPatient({ params }: PageProps) {
                   <div 
                     className="p-4 rounded-lg border"
                     style={{
-                      backgroundColor: selectedClinic?.color 
-                        ? lightenColor(selectedClinic.color, 0.97)
-                        : '#EBF8FF',
-                      borderColor: selectedClinic?.color 
-                        ? lightenColor(selectedClinic.color, 0.9)
-                        : '#DBEAFE',
+                      backgroundColor: getClinicLightColor(selectedClinic, 0.97),
+                      borderColor: getClinicLightColor(selectedClinic, 0.9),
                     }}
                   >
                     <p 
                       className="text-sm"
-                      style={{ color: selectedClinic?.color || '#2563EB' }}
+                      style={{ color: dynamicStyles.textColor }}
                     >
                       <span className="font-bold">Note:</span> ใช้ปุ่ม "save
                       changes"
