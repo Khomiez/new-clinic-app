@@ -1,4 +1,4 @@
-// src/app/(protected)/patients/edit/[id]/page.tsx - UPDATED: Complete temporary file upload support
+// src/app/(protected)/patients/edit/[id]/page.tsx - UPDATED: Complete temporary file upload support with clinic colors
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -27,6 +27,7 @@ import { fetchClinics } from "@/redux/features/clinics/clinicsSlice";
 import { fetchAdminData } from "@/redux/features/admin/adminSlice";
 import { useAuth } from "@/context";
 import { toIdString } from "@/utils/mongoHelpers";
+import { lightenColor, generateClinicColorTheme } from "@/utils/colorUtils";
 
 // Fix type for Next.js 15 - params is now a Promise
 interface PageProps {
@@ -90,6 +91,32 @@ export default function EditPatient({ params }: PageProps) {
 
   // State for showing discard confirmation
   const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false);
+
+  // Generate dynamic styles based on clinic color
+  const getDynamicStyles = () => {
+    if (!selectedClinic?.color) {
+      return {
+        backgroundClass: "bg-gradient-to-br from-blue-50 to-white",
+        cardBg: "bg-white",
+        buttonBg: "bg-blue-500 hover:bg-blue-600",
+        borderColor: "border-blue-100",
+        textColor: "text-blue-800",
+        subTextColor: "text-slate-500",
+      };
+    }
+
+    const theme = generateClinicColorTheme(selectedClinic.color);
+    return {
+      backgroundClass: `bg-gradient-to-br from-[${theme.primaryLight}] to-white`,
+      cardBg: "bg-white",
+      buttonBg: `bg-[${selectedClinic.color}] hover:bg-[${lightenColor(selectedClinic.color, -0.1)}]`,
+      borderColor: `border-[${theme.border}]`,
+      textColor: selectedClinic.color,
+      subTextColor: lightenColor(selectedClinic.color, 0.3),
+    };
+  };
+
+  const dynamicStyles = getDynamicStyles();
 
   // Resolve params Promise for Next.js 15
   useEffect(() => {
@@ -169,7 +196,7 @@ export default function EditPatient({ params }: PageProps) {
 
       // Clear pending operations when loading fresh data
       setPendingFileDeletions([]);
-      setTemporaryFiles([]); // NEW: Clear temporary files
+      setTemporaryFiles([]);
     }
   }, [patientFromStore, patientLoading]);
 
@@ -179,7 +206,7 @@ export default function EditPatient({ params }: PageProps) {
       const hasDataChanges =
         JSON.stringify(patient) !== JSON.stringify(originalPatient);
       const hasPendingDeletions = pendingFileDeletions.length > 0;
-      const hasPendingUploads = temporaryFiles.length > 0; // NEW: Check temporary files
+      const hasPendingUploads = temporaryFiles.length > 0;
       setHasUnsavedChanges(
         hasDataChanges || hasPendingDeletions || hasPendingUploads
       );
@@ -792,12 +819,22 @@ export default function EditPatient({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
+    <div 
+      className={`min-h-screen transition-all duration-500`}
+      style={{
+        background: selectedClinic?.color 
+          ? `linear-gradient(135deg, ${lightenColor(selectedClinic.color, 0.97)} 0%, white 100%)`
+          : 'linear-gradient(135deg, #EBF8FF 0%, white 100%)'
+      }}
+    >
       {/* Discard Confirmation Modal */}
       {showDiscardConfirmation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
-            <h3 className="text-xl font-bold text-red-600 mb-4">
+            <h3 
+              className="text-xl font-bold mb-4"
+              style={{ color: selectedClinic?.color || '#DC2626' }}
+            >
               Discard Changes?
             </h3>
             <div className="mb-6">
@@ -828,7 +865,10 @@ export default function EditPatient({ params }: PageProps) {
               </button>
               <button
                 onClick={confirmDiscard}
-                className="flex-1 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+                className="flex-1 py-2 text-white rounded-lg transition"
+                style={{
+                  backgroundColor: selectedClinic?.color || '#DC2626',
+                }}
               >
                 Discard Changes
               </button>
@@ -854,7 +894,10 @@ export default function EditPatient({ params }: PageProps) {
           {/* Header with Main Save/Cancel Buttons */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-blue-800 flex items-center gap-2">
+              <h1 
+                className="text-2xl font-semibold flex items-center gap-2"
+                style={{ color: selectedClinic?.color || '#1E40AF' }}
+              >
                 แก้ไขข้อมูลผู้ป่วย <span className="text-xl">👩‍⚕️</span>
                 {hasUnsavedChanges && (
                   <span className="text-sm bg-orange-100 text-orange-600 px-2 py-1 rounded">
@@ -862,7 +905,9 @@ export default function EditPatient({ params }: PageProps) {
                   </span>
                 )}
               </h1>
-              <p className="text-slate-500">
+              <p 
+                style={{ color: selectedClinic?.color ? lightenColor(selectedClinic.color, 0.3) : '#64748B' }}
+              >
                 ปรับปรุงข้อมูลผู้ป่วยและประวัติการรักษา
               </p>
               {/* NEW: Enhanced status display */}
@@ -882,7 +927,11 @@ export default function EditPatient({ params }: PageProps) {
             <div className="flex gap-3">
               <button
                 onClick={handleDiscard}
-                className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition flex items-center gap-1"
+                className="px-4 py-2 rounded-lg transition flex items-center gap-1"
+                style={{
+                  backgroundColor: lightenColor(selectedClinic?.color || '#3B82F6', 0.9),
+                  color: selectedClinic?.color || '#1D4ED8',
+                }}
                 disabled={isSaving}
               >
                 <span>Cancel</span> ❌
@@ -890,7 +939,10 @@ export default function EditPatient({ params }: PageProps) {
               <button
                 onClick={handleSave}
                 disabled={isSaving || !hasUnsavedChanges}
-                className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:bg-blue-300"
+                className="flex items-center text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                style={{
+                  backgroundColor: selectedClinic?.color || '#3B82F6',
+                }}
               >
                 {isSaving ? (
                   <>
@@ -908,8 +960,18 @@ export default function EditPatient({ params }: PageProps) {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Patient Information Card */}
             <div className="lg:col-span-1">
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-blue-100">
-                <h2 className="text-xl text-blue-700 font-medium mb-4 flex items-center gap-2">
+              <div 
+                className="bg-white rounded-xl p-6 shadow-sm border transition-all duration-300"
+                style={{
+                  borderColor: selectedClinic?.color 
+                    ? lightenColor(selectedClinic.color, 0.8)
+                    : '#DBEAFE'
+                }}
+              >
+                <h2 
+                  className="text-xl font-medium mb-4 flex items-center gap-2"
+                  style={{ color: selectedClinic?.color || '#1D4ED8' }}
+                >
                   ข้อมูลผู้ป่วย 📋
                 </h2>
 
@@ -930,7 +992,16 @@ export default function EditPatient({ params }: PageProps) {
                         onChange={handleChange}
                         placeholder="Enter patient's full name"
                         required
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
+                        className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-colors"
+                        style={{
+                          backgroundColor: selectedClinic?.color 
+                            ? lightenColor(selectedClinic.color, 0.95)
+                            : '#EBF8FF',
+                          borderColor: selectedClinic?.color 
+                            ? lightenColor(selectedClinic.color, 0.8)
+                            : '#DBEAFE',
+                          color: selectedClinic?.color || '#1E40AF',
+                        }}
                       />
                     </div>
 
@@ -949,7 +1020,7 @@ export default function EditPatient({ params }: PageProps) {
                         value={patient.HN_code || ""}
                         onChange={handleChange}
                         disabled={true}
-                        className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-100 cursor-not-allowed"
+                        className="w-full px-4 py-2 rounded-lg border bg-gray-100 cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -968,7 +1039,16 @@ export default function EditPatient({ params }: PageProps) {
                       value={patient.ID_code || ""}
                       onChange={handleChange}
                       placeholder="Enter ID number (optional)"
-                      className="w-full px-4 py-2 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
+                      className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-colors"
+                      style={{
+                        backgroundColor: selectedClinic?.color 
+                          ? lightenColor(selectedClinic.color, 0.95)
+                          : '#EBF8FF',
+                        borderColor: selectedClinic?.color 
+                          ? lightenColor(selectedClinic.color, 0.8)
+                          : '#DBEAFE',
+                        color: selectedClinic?.color || '#1E40AF',
+                      }}
                     />
                   </div>
 
@@ -993,8 +1073,21 @@ export default function EditPatient({ params }: PageProps) {
                     />
                   </div>
 
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                    <p className="text-sm text-blue-600">
+                  <div 
+                    className="p-4 rounded-lg border"
+                    style={{
+                      backgroundColor: selectedClinic?.color 
+                        ? lightenColor(selectedClinic.color, 0.97)
+                        : '#EBF8FF',
+                      borderColor: selectedClinic?.color 
+                        ? lightenColor(selectedClinic.color, 0.9)
+                        : '#DBEAFE',
+                    }}
+                  >
+                    <p 
+                      className="text-sm"
+                      style={{ color: selectedClinic?.color || '#2563EB' }}
+                    >
                       <span className="font-bold">Note:</span> ใช้ปุ่ม "save
                       changes"
                       ด้านบนเพื่อบันทึกข้อมูลผู้ป่วยและประวัติการรักษาทั้งหมด
