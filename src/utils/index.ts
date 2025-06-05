@@ -1,16 +1,14 @@
 // src/utils/index.ts - Updated exports with proper type handling for isolatedModules
-export * from './mongoHelpers';
-export * from './paginationHelpers';
-export * from './fileUtils';
-export * from './getPatientModel';
-export * from './cloudinaryConfig';
-export * from './colorUtils';
+export * from "./mongoHelpers";
+export * from "./paginationHelpers";
+export * from "./fileUtils";
+export * from "./getPatientModel";
+export * from "./cloudinaryConfig";
+export * from "./colorUtils";
+export * from "./thaiLocationUtils"; // NEW: Export location utilities
 
 // Export temporary file storage utilities with proper type exports
-export type {
-  TemporaryFile,
-  PendingUpload
-} from './temporaryFileStorage';
+export type { TemporaryFile, PendingUpload } from "./temporaryFileStorage";
 
 export {
   createTemporaryFile,
@@ -19,5 +17,5 @@ export {
   isTemporaryFileUrl,
   getFileExtension,
   validateFile,
-  canPreviewFile
-} from './temporaryFileStorage';
+  canPreviewFile,
+} from "./temporaryFileStorage";

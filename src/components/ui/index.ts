@@ -1,4 +1,4 @@
-// src/components/ui/index.ts - Updated exports for simplified components
+// src/components/ui/index.ts - Updated exports with Thai address component
 export {default as Card} from './Card';
 export {default as DocumentUpload} from './DocumentUpload';
 export {default as ErrorScreen} from './ErrorScreen';
@@ -12,5 +12,6 @@ export {default as PatientModal} from './PatientModal';
 export {default as PDFViewer} from './PDFViewer';
 export {default as ThaiDatePicker} from './ThaiDatePicker';
 export {default as ThaiDateInput} from './ThaiDateInput';
+export {default as ThaiAddressInput} from './ThaiAddressInput'; // NEW: Export address component
 export {default as EnhancedFileList} from './EnhancedFileList';
 export * from './dateFormatters';

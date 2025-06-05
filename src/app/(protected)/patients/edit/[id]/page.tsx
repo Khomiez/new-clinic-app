@@ -10,8 +10,9 @@ import {
   ErrorScreen,
   MedicalHistorySection,
   ThaiDatePicker,
+  ThaiAddressInput,
 } from "@/components";
-import { IPatient, IClinic, IHistoryRecord } from "@/interfaces";
+import { IPatient, IClinic, IHistoryRecord, IPatientAddress } from "@/interfaces";
 import {
   TemporaryFile,
   revokeFilePreviewUrl,
@@ -70,6 +71,7 @@ export default function EditPatient({ params }: PageProps) {
     ID_code: "",
     lastVisit: undefined,
     history: [],
+    address: {},
   });
   const [originalPatient, setOriginalPatient] =
     useState<Partial<IPatient> | null>(null);
@@ -786,6 +788,14 @@ export default function EditPatient({ params }: PageProps) {
     }
   };
 
+  // Add address change handler
+  const handleAddressChange = (address: IPatientAddress) => {
+    setPatient((prev) => ({
+      ...prev,
+      address,
+    }));
+  };
+
   // Show loading screen while resolving params or loading data
   if (
     loading ||
@@ -1043,8 +1053,7 @@ export default function EditPatient({ params }: PageProps) {
                         className="block text-sm font-medium text-slate-600 mb-1"
                         htmlFor="HN_code"
                       >
-                        Hospital Number (HN){" "}
-                        <span className="text-red-500">*</span>
+                        เลขที่ HN <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -1052,33 +1061,51 @@ export default function EditPatient({ params }: PageProps) {
                         name="HN_code"
                         value={patient.HN_code || ""}
                         onChange={handleChange}
-                        disabled={true}
-                        className="w-full px-4 py-2 rounded-lg border bg-gray-100 cursor-not-allowed"
+                        placeholder="Enter HN code"
+                        required
+                        className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-colors"
+                        style={{
+                          backgroundColor: dynamicStyles.inputBackground,
+                          borderColor: dynamicStyles.inputBorderColor,
+                          color: dynamicStyles.textColor,
+                        }}
                       />
                     </div>
-                  </div>
 
-                  <div>
-                    <label
-                      className="block text-sm font-medium text-slate-600 mb-1"
-                      htmlFor="ID_code"
-                    >
-                      รหัสประชาชน
-                    </label>
-                    <input
-                      type="text"
-                      id="ID_code"
-                      name="ID_code"
-                      value={patient.ID_code || ""}
-                      onChange={handleChange}
-                      placeholder="Enter ID number (optional)"
-                      className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-colors"
-                      style={{
-                        backgroundColor: dynamicStyles.inputBackground,
-                        borderColor: dynamicStyles.inputBorderColor,
-                        color: dynamicStyles.textColor,
-                      }}
-                    />
+                    <div>
+                      <label
+                        className="block text-sm font-medium text-slate-600 mb-1"
+                        htmlFor="ID_code"
+                      >
+                        เลขบัตรประชาชน
+                      </label>
+                      <input
+                        type="text"
+                        id="ID_code"
+                        name="ID_code"
+                        value={patient.ID_code || ""}
+                        onChange={handleChange}
+                        placeholder="Enter ID card number"
+                        className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-colors"
+                        style={{
+                          backgroundColor: dynamicStyles.inputBackground,
+                          borderColor: dynamicStyles.inputBorderColor,
+                          color: dynamicStyles.textColor,
+                        }}
+                      />
+                    </div>
+
+                    {/* Add ThaiAddressInput component */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 mb-1">
+                        ที่อยู่
+                      </label>
+                      <ThaiAddressInput
+                        address={patient.address}
+                        onChange={handleAddressChange}
+                        clinicColor={selectedClinic?.color}
+                      />
+                    </div>
                   </div>
 
                   <div>
